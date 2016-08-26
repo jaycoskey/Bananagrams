@@ -25,13 +25,21 @@
 #       to determine whether or not the remaining tiles can all be used to find the other 9-letter words.
 #
 # Possible future ideas:
-# (*) Be selective about which "stub wordlists" to investigate.
+# (*) [Feature] Allow command-line selection of seed wordlist length.
+# (*) [Feature] Allow support for a broader range of word-related challenges.
+# (*) [Performance] Be selective about which "stub wordlists" to investigate.
 #     - Only pursue those whose gap letter frequencies (i.e., the distribution of the remaining tiles)
 #       closely matches (via least squares or cosine distance) the average letter frequencies of 9-letter
 #       words in the dictionary.
 #     - Exclude from consideration those "stub wordlists"
 #         o those with gap letter frequencies that permit too few (e.g., < 100) 9-letter words.
-#         o those that permit so many 9-letter words that the number of combinations is too computationally expensive.
+#         o those that permit so many 9-letter words that completing would be too computationally expensive.
+#           [Did something like this below, by adding MAX_PAIR_COUNT]
+# (*) [Performance] Relieve memory pressure caused by large of triples.
+#     Writing to a temporary file could relieve memory pressure, at some performance cost.
+#     A multiprocessing pipe (or async for) would help across a network, but probably not on a single host.
+# (*) [Performance] Breaking up singletons into chunks (as done below) uses less code than chunking pairs/triples/quadruples,
+#     but chunking pairs/triples/quadruples would allow for smoother pipelining between phases.
 #
 # TODO: Add command-line arguments, at least to set do_test and is_verbose.
 # TODO: Refactor logic for pairs, triples, quadruples, quintuples, to all share the same form.
@@ -42,6 +50,10 @@ import multiprocessing  # cpu_count, Pool
 import random
 import re
 import time
+
+# Added a limit of 250K pairs after hitting a MemoryError with ~290K  pairs (and ~1150 singletons) on 8GB of RAM.
+# (The highest load is in the computation of triples, and pair count is a better predictor of that than singleton count.)
+MAX_PAIR_COUNT = 250000
 
 PATH_LINUX_WORDS = 'C:\\cygwin64\\usr\\share\\dict\\linux.words'
 PATH_LOG_WORDLISTS = 'wordlists.txt'
@@ -334,6 +346,11 @@ def main(do_test, is_verbose, pool):
                                  for singleton_chunk in singleton_chunks]
             pair_chunks = [pair_chunk.get(timeout=None) for pair_chunk in pair_chunk_asyncs]
             pairs = flatten(pair_chunks)
+            if len(pairs) > MAX_PAIR_COUNT:
+                print('Aborting search for this wordlist.  Candidate pair count ({0}) exceeds max setting ({1})'
+                      .format(len(pairs), MAX_PAIR_COUNT)
+                      )
+                pairs = []
             show_progress(',{0}'.format(len(pairs)))
 
             # triples = get_tuples3_from_tuples2(constraint, singletons, pairs)
