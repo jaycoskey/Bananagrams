@@ -41,23 +41,23 @@
 # (*) [Performance] Breaking up singletons into chunks (as done below) uses less code than chunking pairs/triples/quadruples,
 #     but chunking pairs/triples/quadruples would allow for smoother pipelining between phases.
 #
-# TODO: Add command-line arguments, at least to set do_test and is_verbose.
-# TODO: Refactor logic for pairs, triples, quadruples, quintuples, to all share the same form.
-#
+import argparse
 import collections
 import math
 import multiprocessing  # cpu_count, Pool
 import random
 import re
+import sys
 import time
 
 # Added a limit of 250K pairs after hitting a MemoryError with ~290K  pairs (and ~1150 singletons) on 8GB of RAM.
 # (The highest load is in the computation of triples, and pair count is a better predictor of that than singleton count.)
 MAX_PAIR_COUNT = 250000
 
-PATH_LINUX_WORDS = 'C:\\cygwin64\\usr\\share\\dict\\linux.words'
-PATH_LOG_WORDLISTS = 'wordlists.txt'
-PATH_WORDS9 = 'C:\\cygwin64\\usr\\share\\dict\\words9'
+PATH_LINUX_WORDS = '/usr/share/dict/linux.words'
+PATH_LOG_WORDLISTS = './bgrams.log'
+PATH_WORDS9 = './bgrams9.txt'
+POOL_SIZE = 3
 TARGET_HISTO = collections.Counter({
     'a': 13, 'b': 3, 'c': 3, 'd': 6, 'e': 18,
     'f': 3, 'g': 4, 'h': 3, 'i': 12, 'j': 2,
@@ -68,10 +68,16 @@ TARGET_HISTO = collections.Counter({
 })
 TARGET_WORDCOUNT = 16
 TARGET_WORDLENGTH = 9
+TUPLE_CHUNK_SIZE = 10000
+TUPLE_PROGRESS_CHARS = ['a', 'b', 'c']
+
+# Given equal loads, the first pool starts and ends earlier (due to IO?), so give it more tuples to handle.
+# Would need to experiment to determine the optimal weighting.
+TUPLE_WEIGHTS = [50, 35, 20]
 TUPLE_WORDCOUNT = 5
 
-PATH_LOG_WORDLISTS_TEST = 'wordlists_test.txt'
-PATH_WORDS9_TEST = 'C:\\cygwin64\\usr\\share\\dict\\words9_test'
+PATH_LOG_WORDLISTS_TEST = './bgrams_test.log'
+PATH_WORDS9_TEST = './bgrams9_test.txt'
 TARGET_HISTO_TEST = collections.Counter({
     'a': 12, 'b': 2, 'c': 4, 'd': 5, 'e': 5,
     'f': 0, 'g': 0, 'h': 0, 'i': 5, 'j': 1,
@@ -106,8 +112,26 @@ def adjust_word_count(all_words, target_count, words):
             words.pop()
 
 
+def chunk_by_weight(items, weights):
+    item_count = len(items)
+    result = []
+    begin_index = 0
+    for i in range(0, len(weights)):
+        if i == len(weights) - 1:
+            step_size = len(items) - begin_index
+        else:
+            step_size = math.floor(weights[i] * item_count)
+        result.append(items[begin_index: begin_index + step_size])
+        begin_index += step_size
+    return result
+
+
 def chunkify(items, number_of_bins):
     chunk_size = math.ceil(len(items) / number_of_bins)
+    return chunks_of(items, chunk_size)
+
+
+def chunks_of(items, chunk_size):
     return [items[i: i + chunk_size] for i in range(0, len(items), chunk_size)]
 
 
@@ -128,7 +152,11 @@ def constraint_satisfaction_gap_from_wordlist(constraint, words):
 
 
 def flatten(lsts):
-    return [item for lst in lsts for item in lst]
+    # [item for lst in lsts for item in lst]
+    result = []
+    for lst in lsts:  # Or reversed(lsts)
+        result[0:0] = lst
+    return result
 
 
 def get_gap_histo(words):
@@ -193,7 +221,7 @@ def get_singletons(constraint, words):
     return singletons
 
 
-def get_timestamp():
+def get_datestamp():
     return time.strftime('[%Y-%m-%d @ %H:%M:%S]')
 
 
@@ -205,21 +233,43 @@ def get_tuples2_from_singletons(constraint, singletons1, singletons2):
     return pairs
 
 
-def get_tuples3_from_tuples2(constraint, singletons, tuples2):
-    pairs = tuples2
-    triplets = [(w1, w2, w3, c12 + c3)
-                for (w1, w2, c12) in pairs
-                for (w3, c3) in singletons
-                if w3 > w2 and is_constraint_satisfied(constraint, c12 + c3)]
-    return triplets
+def get_tuples3_from_tuples2(constraint, singletons, tuples2, progress_char):
+    tuple2_chunks = chunks_of(tuples2, TUPLE_CHUNK_SIZE)
+    triple_chunks = []
+    for tuple2_chunk in tuple2_chunks:
+        triple_chunks.append(
+            [(w1, w2, w3, c12 + c3)
+             for (w1, w2, c12) in tuple2_chunk
+             for (w3, c3) in singletons
+             if w3 > w2 and is_constraint_satisfied(constraint, c12 + c3)]
+        )
+        if len(tuple2_chunk) == TUPLE_CHUNK_SIZE:
+            show_progress(progress_char.upper())
+        elif len(tuple2_chunk) < TUPLE_CHUNK_SIZE:
+            show_progress(progress_char.lower())
+        else:
+            show_progress('?')
+    triples = flatten(triple_chunks)
+    return triples
 
 
-def get_tuples4_from_tuples3(constraint, singletons, tuples3):
-    triples = tuples3
-    quadruples = [(w1, w2, w3, w4, c123 + c4)
-                  for (w1, w2, w3, c123) in triples
-                  for (w4, c4) in singletons
-                  if w4 > w3 and is_constraint_satisfied(constraint, c123 + c4)]
+def get_tuples4_from_tuples3(constraint, singletons, tuples3, progress_char):
+    tuple3_chunks = chunks_of(tuples3, TUPLE_CHUNK_SIZE)
+    quadruple_chunks = []
+    for tuple3_chunk in tuple3_chunks:
+        quadruple_chunks.append(
+            [(w1, w2, w3, w4, c123 + c4)
+             for (w1, w2, w3, c123) in tuple3_chunk
+             for (w4, c4) in singletons
+             if w4 > w3 and is_constraint_satisfied(constraint, c123 + c4)]
+        )
+        if len(tuple3_chunk) == TUPLE_CHUNK_SIZE:
+            show_progress(progress_char.upper())
+        elif len(tuple3_chunk) < TUPLE_CHUNK_SIZE:
+            show_progress(progress_char.lower())
+        else:
+            show_progress('?')
+    quadruples = flatten(quadruple_chunks)
     return quadruples
 
 
@@ -248,7 +298,13 @@ def is_constraint_satisfied(constraint, counter):
 def log_wordlist(path_log_wordlists, words):
     msg_log = '{0:d}: {1:s}'.format(len(words), words)
     with open(path_log_wordlists, 'a') as f:
-        f.write(get_timestamp() + ' ' + msg_log + '\n')
+        f.write(get_datestamp() + ' ' + msg_log + '\n')
+
+
+def normalize(weights):
+    total = sum(weights)
+    normalized = [w/(1.0*total) for w in weights]
+    return normalized
 
 
 def print_wordlist(header, words):
@@ -258,7 +314,7 @@ def print_wordlist(header, words):
 
 
 def read_words9(path_words9):
-    with open(path_words9) as f:
+    with open(path_words9, 'r') as f:
         lines = [line.rstrip('\n') for line in f]
         w9 = [line for line in lines if line.islower() and len(line) == TARGET_WORDLENGTH]
     return w9
@@ -293,15 +349,15 @@ def write_words9(do_test) -> None:
             w9f.write(word + '\n')
 
 
-def main(do_test, is_verbose, pool):
-    if do_test:
+def main(pool, parser_args):
+    if parser_args.test:
         path_log_wordlists = PATH_LOG_WORDLISTS_TEST
         path_words9 = PATH_WORDS9_TEST
         target_histo = TARGET_HISTO_TEST
         target_wordcount = TARGET_WORDCOUNT_TEST
     else:
-        path_log_wordlists = PATH_LOG_WORDLISTS
-        path_words9 = PATH_WORDS9
+        path_log_wordlists = args.log_file.name
+        path_words9 = args.input_file.name
         target_histo = TARGET_HISTO
         target_wordcount = TARGET_WORDCOUNT
 
@@ -313,7 +369,7 @@ def main(do_test, is_verbose, pool):
     w_q = get_words_with_char(words9, 'q')
     w_x = get_words_with_char(words9, 'x')
     w_z = get_words_with_char(words9, 'z')
-    if is_verbose:
+    if args.verbose:
         print("words9 count = {0:d}".format(len(words9)))
         print("words_j count = {0:d}".format(len(w_j)))
         print("words_k count = {0:d}".format(len(w_k)))
@@ -323,7 +379,7 @@ def main(do_test, is_verbose, pool):
 
     wordlist0 = get_initial_list(words9, w_j, w_k, w_q, w_x, w_z,
                                  wordcount=target_wordcount - TUPLE_WORDCOUNT)
-    if is_verbose:
+    if args.verbose:
         print_wordlist('Initial candidate word list:', wordlist0)
 
     cur_wordlist = wordlist0
@@ -333,13 +389,18 @@ def main(do_test, is_verbose, pool):
         iter_count += 1
         constraint = constraint_satisfaction_gap_from_wordlist(target_histo, cur_wordlist)
         if constraint is not None:
-            if is_verbose:
-                print('cur_wordlist={0:s}; gap={1:s}'.format(cur_wordlist.__str__(), constraint.__str__()))
-            show_progress('\n' + get_timestamp() + u' \u00bf')  # Upside-down question mark
+            show_progress('\n' + get_datestamp() + ' ')
             singletons = get_singletons(constraint, words9)
             show_progress('{0}'.format(len(singletons)))
 
-            singleton_chunks = chunkify(singletons, multiprocessing.cpu_count())  # Alternative: # CPUs - 1
+            # singleton_chunks = chunkify(singletons, multiprocessing.cpu_count() - 1)
+            singleton_chunks = chunk_by_weight(singletons, normalize(TUPLE_WEIGHTS))
+            singleton_chunks_with_progress_chars = list(zip(singleton_chunks, TUPLE_PROGRESS_CHARS))
+
+            # show_progress('(')
+            # for (chunk, prog_char) in singleton_chunks_with_progress_chars:
+            #     print('{0:s}:{1:d} '.format(prog_char, len(chunk)), end='')
+            # show_progress(')')
 
             # pairs = get_tuples2_from_singletons(constraint, singletons)
             pair_chunk_asyncs = [pool.apply_async(get_tuples2_from_singletons, (constraint, singleton_chunk, singletons))
@@ -347,33 +408,33 @@ def main(do_test, is_verbose, pool):
             pair_chunks = [pair_chunk.get(timeout=None) for pair_chunk in pair_chunk_asyncs]
             pairs = flatten(pair_chunks)
             if len(pairs) > MAX_PAIR_COUNT:
-                print('Aborting search for this wordlist.  Candidate pair count ({0}) exceeds max setting ({1})'
+                print('\tAborting search for this wordlist.  Candidate pair count ({0}) exceeds max setting ({1}).'
                       .format(len(pairs), MAX_PAIR_COUNT)
                       )
                 pairs = []
-            show_progress(',{0}'.format(len(pairs)))
+            show_progress(', {0}:'.format(len(pairs)))
 
             # triples = get_tuples3_from_tuples2(constraint, singletons, pairs)
-            triple_chunk_asyncs = [pool.apply_async(get_tuples3_from_tuples2, (constraint, singleton_chunk, pairs))
-                                   for singleton_chunk in singleton_chunks]
+            triple_chunk_asyncs = [pool.apply_async(get_tuples3_from_tuples2,
+                                                    (constraint, singleton_chunk, pairs, prog_char))
+                                   for (singleton_chunk, prog_char) in singleton_chunks_with_progress_chars]
             triple_chunks = [triple_chunk.get(timeout=None) for triple_chunk in triple_chunk_asyncs]
             triples = flatten(triple_chunks)
-            show_progress(',{0}'.format(len(triples)))
+            show_progress(', {0}:'.format(len(triples)))
 
             # quadruples = get_tuples4_from_tuples3(constraint, singletons, triples)
-            quadruple_chunk_asyncs = [pool.apply_async(get_tuples4_from_tuples3, (constraint, singleton_chunk, triples))
-                                      for singleton_chunk in singleton_chunks]
+            quadruple_chunk_asyncs = [pool.apply_async(get_tuples4_from_tuples3,
+                                                       (constraint, singleton_chunk, triples, prog_char))
+                                      for (singleton_chunk, prog_char) in singleton_chunks_with_progress_chars]
             quadruples = flatten([quadruple_chunk.get(timeout=None) for quadruple_chunk in quadruple_chunk_asyncs])
-            show_progress(',{0}'.format(len(quadruples)))
+            show_progress(', {0}'.format(len(quadruples)))
 
             # quintuples = get_tuples5_from_tuples4(constraint, singletons, quadruples)
             quintuple_chunk_asyncs = [
                 pool.apply_async(get_tuples5_from_tuples4, (constraint, singleton_chunk, quadruples))
                 for singleton_chunk in singleton_chunks]
             quintuples = flatten([quintuple_chunk.get(timeout=None) for quintuple_chunk in quintuple_chunk_asyncs])
-            show_progress(',{0}'.format(len(quintuples)))
-
-            show_progress('?')
+            show_progress(', {0}'.format(len(quintuples)))
 
             if len(quintuples) > 0:
                 for (w1, w2, w3, w4, w5) in quintuples:
@@ -400,12 +461,29 @@ def main(do_test, is_verbose, pool):
 
 
 if __name__ == '__main__':
-    # Parse command-line args
-    do_test = False
-    is_verbose = False
-    pool = multiprocessing.Pool(processes=4)
+    # Early configuration sanity check
+    assert(POOL_SIZE == len(TUPLE_PROGRESS_CHARS))
+    assert(POOL_SIZE == len(TUPLE_WEIGHTS))
+
+    parser = argparse.ArgumentParser(prog='bgrams')
+    parser.add_argument('-i', '--input_file',
+                        default=PATH_WORDS9,
+                        type=argparse.FileType('r'),
+                        help='specify name of input file containing nine-letter words')
+    parser.add_argument('-l', '--log_file',
+                        default=PATH_LOG_WORDLISTS,
+                        type=argparse.FileType('a'),
+                        help='specify name of logfile')
+    parser.add_argument('-t', '--test',
+                        action='store_true',
+                        help='run test version of script')
+    parser.add_argument('-v', '--verbose',
+                        action='store_true',
+                        help='run in verbose mode')
+    args = parser.parse_args(sys.argv[1:])
+    pool = multiprocessing.Pool(processes=POOL_SIZE)
     try:
-        main(do_test, is_verbose, pool)
+        main(pool, args)
     finally:
         pool.close()
         pool.join()
