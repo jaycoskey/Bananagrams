@@ -43,10 +43,10 @@ PATH_LOG_WORDLISTS_TEST = './bgrams_test.log'
 PATH_WORDS9_TEST = './bgrams9_test.txt'
 TARGET_HISTO_TEST = collections.Counter({
     'a': 12, 'b': 2, 'c': 4, 'd': 5, 'e': 5,
-    'f': 0, 'g': 0, 'h': 0, 'i': 5, 'j': 1,
-    'k': 1, 'l': 1, 'm': 0, 'n': 1, 'o': 1,
-    'p': 0, 'q': 1, 'r': 2, 's': 2, 't': 4,
-    'u': 3, 'v': 2, 'w': 0, 'x': 1, 'y': 0,
+    'f': 0,  'g': 0, 'h': 0, 'i': 5, 'j': 1,
+    'k': 1,  'l': 1, 'm': 0, 'n': 1, 'o': 1,
+    'p': 0,  'q': 1, 'r': 2, 's': 2, 't': 4,
+    'u': 3,  'v': 2, 'w': 0, 'x': 1, 'y': 0,
     'z': 1
 })
 TARGET_WORDCOUNT_TEST = 6
@@ -55,6 +55,9 @@ TARGET_WORDCOUNT_TEST = 6
 class WordCache():
     def __init__(self, words):
         self._primes = self._primes_less_than(102)
+        # This value for _mod supports non-colliding hash
+        # for 9 & 12-letter words.
+        self._mod = 1000000000
         self._alpha2prime = self._get_alpha2prime(0, 1)
         words_sorted = sorted(words, key=lambda w: self._word2hash(w))
         self._hash2anagrams = {}
@@ -76,17 +79,17 @@ class WordCache():
         return alpha2prime
 
     def _counter2hash(self, counter: collections.Counter):
-        return reduce(mul, [self._alpha2prime[c] ** v for c, v in counter.items()]) % 1000000000
+        return reduce(mul, [self._alpha2prime[c] ** v for c, v in counter.items()]) % self._mod
 
     def _word2hash(self, word: str):
-        return reduce(mul, [self._alpha2prime[c] for c in word]) % 1000000000
+        return reduce(mul, [self._alpha2prime[c] for c in word]) % self._mod
 
     def get_anagrams_by_hash(self, hash):
         return self._hash2anagrams.get(hash, [])
 
     def get_anagrams_by_counter(self, counter: collections.Counter):
-        assert(isinstance(counter, collections.Counter))
-        return self._hash2anagrams.get(self._counter2hash(counter), [])
+        anagrams = self._hash2anagrams.get(self._counter2hash(counter), [])
+        return anagrams
 
 
 def add_missing_letters(w_j, w_k, w_q, w_x, w_z, letters, words):
@@ -167,13 +170,6 @@ def get_gap_histo(words):
     result = TARGET_HISTO.copy()
     result.subtract(histo)
     return result
-
-
-def get_histo_map(words):
-    histo_map = {}
-    for w in words:
-        histo_map[collections.Counter(w).items()] = w
-    return histo_map
 
 
 def get_initial_list(all_words, w_j, w_k, w_q, w_z, w_x, wordcount):
@@ -285,11 +281,12 @@ def get_tuples5_from_tuples4(constraint, singletons, tuples4, word_cache):
     #
     # More efficient, cache-enabled version:
     quintuples = []
+    # singleton_words = list(map(lambda (s, c): s, singletons))
     for (w1, w2, w3, w4, c1234) in tuples4:
         # Direct subtraction doesn't track negative counts, but that's OK.
         for w5 in word_cache.get_anagrams_by_counter(constraint - c1234):
-            if w5 in singletons:
-                quintuples.append((w1, w2, w3, w4, w5))
+            # if w5 in singletons_words:
+            quintuples.append((w1, w2, w3, w4, w5))
     return quintuples
 
 
@@ -340,6 +337,7 @@ def get_quintuples_from_wordlist(words9, word_cache, constraint):
     show_progress(', {0}'.format(len(quintuples)))
     return quintuples
 
+
 def get_words_with_char(words, char):
     return [w for w in words if re.search(char, w)]
 
@@ -368,7 +366,7 @@ def normalize(weights):
 def print_wordlist(header, words):
     print(header)
     for w in words:
-        print('\t{0:s}'.format(w))
+        print('\t{0:s}'.format(w.__str__()))
 
 
 def read_words9(path_words9):
@@ -392,6 +390,7 @@ def remove_excess_letters(letters, words):
 
 def show_progress(txt):
     print(txt, end='', flush=True)
+
 
 
 def write_words9(do_test) -> None:
@@ -503,3 +502,4 @@ if __name__ == '__main__':
     finally:
         pool.close()
         pool.join()
+
