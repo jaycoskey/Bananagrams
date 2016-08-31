@@ -1,52 +1,15 @@
 #!/usr/bin/python3
 
-# Challenge: Use the tiles from the game Bananagrams to form 7-, 8-, and 9-letter words,
-#   and get the highest score possible, given the following:
-#     * each 7-letter word is worth 1 point
-#     * each 8-letter word is worth 2 points
-#     * each 9-letter word is worth 3 points
-#     * each unused letter subtracts 1 from your score.
-#   The maximum possible score, given the standard 144 tiles, is 48.
-#     (From 16 9-letter words, since 16*9=144.)
-#   Is it possible to find 16 9-letter words and reach the maximum possible score?
-#   If not, what's the highest score that can be achieved?
-#
-# Strategy:
-# (1) Assess how computationally tractable it is to find long lists if 9-letter words with the available tiles.
-#       - Start with short candidate lists.  Lengthen as longer solutions are found.
-#       - On each iteration:
-#         - Remove some of the words that push the character histogram over its constraints.
-#         - Add or remove words as needed to get to the desired wordlist length.
-#       => Conclusions:
-#         - 14-word lists of 9-letter words (that only use available tiles) take a long time to find.
-#         - 13-word lists can be found in a few minutes.
-#         - 12-word and 11-word lists can be found almost instantaneously.
-# (2) Repeatedly find a "stub wordlist" (e.g., an 11-word list), then do an exhaustive search
-#       to determine whether or not the remaining tiles can all be used to find the other 9-letter words.
-#
-# Possible future ideas:
-# (*) [Feature] Allow command-line selection of seed wordlist length.
-# (*) [Feature] Allow support for a broader range of word-related challenges.
-# (*) [Performance] Be selective about which "stub wordlists" to investigate.
-#     - Only pursue those whose gap letter frequencies (i.e., the distribution of the remaining tiles)
-#       closely matches (via least squares or cosine distance) the average letter frequencies of 9-letter
-#       words in the dictionary.
-#     - Exclude from consideration those "stub wordlists"
-#         o those with gap letter frequencies that permit too few (e.g., < 100) 9-letter words.
-#         o those that permit so many 9-letter words that completing would be too computationally expensive.
-#           [Did something like this below, by adding MAX_PAIR_COUNT]
-# (*) [Performance] Relieve memory pressure caused by large of triples.
-#     Writing to a temporary file could relieve memory pressure, at some performance cost.
-#     A multiprocessing pipe (or async for) would help across a network, but probably not on a single host.
-# (*) [Performance] Breaking up singletons into chunks (as done below) uses less code than chunking pairs/triples/quadruples,
-#     but chunking pairs/triples/quadruples would allow for smoother pipelining between phases.
-#
 import argparse
 import collections
+from functools import reduce
+from itertools import groupby
 import math
 import multiprocessing  # cpu_count, Pool
+from operator import mul
 import random
 import re
+import string
 import sys
 import time
 
@@ -87,6 +50,43 @@ TARGET_HISTO_TEST = collections.Counter({
     'z': 1
 })
 TARGET_WORDCOUNT_TEST = 6
+
+
+class WordCache():
+    def __init__(self, words):
+        self._primes = self._primes_less_than(102)
+        self._alpha2prime = self._get_alpha2prime(0, 1)
+        words_sorted = sorted(words, key=lambda w: self._word2hash(w))
+        self._hash2anagrams = {}
+        for hash, anagroup in groupby(words_sorted, self._word2hash):
+            anagrams = list(anagroup)
+            self._hash2anagrams[hash] = anagrams
+
+    # From O'Reilly's Python Cookbook
+    def _primes_less_than(self, n):
+        aux = { }
+        return [aux.setdefault(p, p) for p in range(2, n)
+                if 0 not in [p % d for d in aux if p >= d + d]]
+
+    def _get_alpha2prime(self, p_init, p_step):
+        alphabet = string.ascii_lowercase[:26]
+        alpha2prime = {}
+        for i in range(0, 26):
+            alpha2prime[alphabet[i]] = self._primes[p_init + p_step * i]
+        return alpha2prime
+
+    def _counter2hash(self, counter: collections.Counter):
+        return reduce(mul, [self._alpha2prime[c] ** v for c, v in counter.items()]) % 1000000000
+
+    def _word2hash(self, word: str):
+        return reduce(mul, [self._alpha2prime[c] for c in word]) % 1000000000
+
+    def get_anagrams_by_hash(self, hash):
+        return self._hash2anagrams.get(hash, [])
+
+    def get_anagrams_by_counter(self, counter: collections.Counter):
+        assert(isinstance(counter, collections.Counter))
+        return self._hash2anagrams.get(self._counter2hash(counter), [])
 
 
 def add_missing_letters(w_j, w_k, w_q, w_x, w_z, letters, words):
@@ -273,14 +273,72 @@ def get_tuples4_from_tuples3(constraint, singletons, tuples3, progress_char):
     return quadruples
 
 
-def get_tuples5_from_tuples4(constraint, singletons, tuples4):
-    quadruples = tuples4
-    quintuples = [(w1, w2, w3, w4, w5)  # Do not return counters; they're no longer needed.
-                  for (w1, w2, w3, w4, c1234) in quadruples
-                  for (w5, c5) in singletons
-                  if w5 > w4 and is_constraint_satisfied(constraint, c1234 + c5)]
+def get_tuples5_from_tuples4(constraint, singletons, tuples4, word_cache):
+    # Old version:
+    # quadruples = tuples4
+    # quintuples = [(w1, w2, w3, w4, w5)  # Do not return counters; they're no longer needed.
+    #               for (w1, w2, w3, w4, c1234) in quadruples
+    #               for (w5, c5) in singletons
+    #               if w5 > w4 and is_constraint_satisfied(constraint, c1234 + c5)]
+    # last_items = [w1, w2, w3, w4, c123 + c4)
+    # return quintuples
+    #
+    # More efficient, cache-enabled version:
+    quintuples = []
+    for (w1, w2, w3, w4, c1234) in tuples4:
+        # Direct subtraction doesn't track negative counts, but that's OK.
+        for w5 in word_cache.get_anagrams_by_counter(constraint - c1234):
+            if w5 in singletons:
+                quintuples.append((w1, w2, w3, w4, w5))
     return quintuples
 
+
+def get_quintuples_from_wordlist(words9, word_cache, constraint):
+    show_progress('\n' + get_datestamp() + ' ')
+
+    singletons = get_singletons(constraint, words9)
+    show_progress('{0}'.format(len(singletons)))
+
+    # singleton_chunks = chunkify(singletons, multiprocessing.cpu_count() - 1)
+    singleton_chunks = chunk_by_weight(singletons, normalize(TUPLE_WEIGHTS))
+    singleton_chunks_with_progress_chars = list(zip(singleton_chunks, TUPLE_PROGRESS_CHARS))
+
+    # show_progress('(')
+    # for (chunk, prog_char) in singleton_chunks_with_progress_chars:
+    #     print('{0:s}:{1:d} '.format(prog_char, len(chunk)), end='')
+    # show_progress(')')
+
+    # Below is the async version of: pairs = get_tuples2_from_singletons(constraint, singletons)
+    pair_chunk_asyncs = [pool.apply_async(get_tuples2_from_singletons, (constraint, singleton_chunk, singletons))
+                         for singleton_chunk in singleton_chunks]
+    pair_chunks = [pair_chunk.get(timeout=None) for pair_chunk in pair_chunk_asyncs]
+    pairs = flatten(pair_chunks)
+    if len(pairs) > MAX_PAIR_COUNT:
+        print('\tAborting search for this wordlist.  Candidate pair count ({0}) exceeds max setting ({1}).'
+              .format(len(pairs), MAX_PAIR_COUNT)
+              )
+        pairs = []
+    show_progress(', {0}:'.format(len(pairs)))
+
+    # Below is the async version of: triples = get_tuples3_from_tuples2(constraint, singletons, pairs)
+    triple_chunk_asyncs = [pool.apply_async(get_tuples3_from_tuples2,
+                                            (constraint, singleton_chunk, pairs, prog_char))
+                           for (singleton_chunk, prog_char) in singleton_chunks_with_progress_chars]
+    triple_chunks = [triple_chunk.get(timeout=None) for triple_chunk in triple_chunk_asyncs]
+    triples = flatten(triple_chunks)
+    show_progress(', {0}:'.format(len(triples)))
+
+    # Below is the async version of: quadruples = get_tuples4_from_tuples3(constraint, singletons, triples)
+    quadruple_chunk_asyncs = [pool.apply_async(get_tuples4_from_tuples3,
+                                               (constraint, singleton_chunk, triples, prog_char))
+                              for (singleton_chunk, prog_char) in singleton_chunks_with_progress_chars]
+    quadruples = flatten([quadruple_chunk.get(timeout=None) for quadruple_chunk in quadruple_chunk_asyncs])
+    show_progress(', {0}'.format(len(quadruples)))
+
+    # Caching saves us some time searching for the last item in e list.
+    quintuples = get_tuples5_from_tuples4(constraint, singletons, quadruples, word_cache)
+    show_progress(', {0}'.format(len(quintuples)))
+    return quintuples
 
 def get_words_with_char(words, char):
     return [w for w in words if re.search(char, w)]
@@ -364,6 +422,7 @@ def main(pool, parser_args):
     # If there is not a wordlist available with only 9-letter words,
     # then call write_words9() to create one.
     words9 = read_words9(path_words9)
+    word_cache = WordCache(words9)
     w_j = get_words_with_char(words9, 'j')
     w_k = get_words_with_char(words9, 'k')
     w_q = get_words_with_char(words9, 'q')
@@ -388,68 +447,25 @@ def main(pool, parser_args):
     while not is_full_wordlist_found:
         iter_count += 1
         constraint = constraint_satisfaction_gap_from_wordlist(target_histo, cur_wordlist)
-        if constraint is not None:
-            show_progress('\n' + get_datestamp() + ' ')
-            singletons = get_singletons(constraint, words9)
-            show_progress('{0}'.format(len(singletons)))
-
-            # singleton_chunks = chunkify(singletons, multiprocessing.cpu_count() - 1)
-            singleton_chunks = chunk_by_weight(singletons, normalize(TUPLE_WEIGHTS))
-            singleton_chunks_with_progress_chars = list(zip(singleton_chunks, TUPLE_PROGRESS_CHARS))
-
-            # show_progress('(')
-            # for (chunk, prog_char) in singleton_chunks_with_progress_chars:
-            #     print('{0:s}:{1:d} '.format(prog_char, len(chunk)), end='')
-            # show_progress(')')
-
-            # pairs = get_tuples2_from_singletons(constraint, singletons)
-            pair_chunk_asyncs = [pool.apply_async(get_tuples2_from_singletons, (constraint, singleton_chunk, singletons))
-                                 for singleton_chunk in singleton_chunks]
-            pair_chunks = [pair_chunk.get(timeout=None) for pair_chunk in pair_chunk_asyncs]
-            pairs = flatten(pair_chunks)
-            if len(pairs) > MAX_PAIR_COUNT:
-                print('\tAborting search for this wordlist.  Candidate pair count ({0}) exceeds max setting ({1}).'
-                      .format(len(pairs), MAX_PAIR_COUNT)
-                      )
-                pairs = []
-            show_progress(', {0}:'.format(len(pairs)))
-
-            # triples = get_tuples3_from_tuples2(constraint, singletons, pairs)
-            triple_chunk_asyncs = [pool.apply_async(get_tuples3_from_tuples2,
-                                                    (constraint, singleton_chunk, pairs, prog_char))
-                                   for (singleton_chunk, prog_char) in singleton_chunks_with_progress_chars]
-            triple_chunks = [triple_chunk.get(timeout=None) for triple_chunk in triple_chunk_asyncs]
-            triples = flatten(triple_chunks)
-            show_progress(', {0}:'.format(len(triples)))
-
-            # quadruples = get_tuples4_from_tuples3(constraint, singletons, triples)
-            quadruple_chunk_asyncs = [pool.apply_async(get_tuples4_from_tuples3,
-                                                       (constraint, singleton_chunk, triples, prog_char))
-                                      for (singleton_chunk, prog_char) in singleton_chunks_with_progress_chars]
-            quadruples = flatten([quadruple_chunk.get(timeout=None) for quadruple_chunk in quadruple_chunk_asyncs])
-            show_progress(', {0}'.format(len(quadruples)))
-
-            # quintuples = get_tuples5_from_tuples4(constraint, singletons, quadruples)
-            quintuple_chunk_asyncs = [
-                pool.apply_async(get_tuples5_from_tuples4, (constraint, singleton_chunk, quadruples))
-                for singleton_chunk in singleton_chunks]
-            quintuples = flatten([quintuple_chunk.get(timeout=None) for quintuple_chunk in quintuple_chunk_asyncs])
-            show_progress(', {0}'.format(len(quintuples)))
-
+        is_cur_wordlist_valid = constraint is not None
+        if is_cur_wordlist_valid:
+            quintuples = get_quintuples_from_wordlist(words9, word_cache, constraint)
             if len(quintuples) > 0:
                 for (w1, w2, w3, w4, w5) in quintuples:
                     full_list = cur_wordlist + [w1, w2, w3, w4, w5]
                     log_wordlist(path_log_wordlists, full_list.__str__())
-                    print_wordlist('\nFull {0:d}-word wordlist found!'.format(target_wordcount), full_list)
+                    print_wordlist('\n{0:s} Full {1:d}-word wordlist found!'.format(get_datestamp(), target_wordcount),
+                                   full_list)
                 is_full_wordlist_found = True
-            else:
-                # Start over again
+
+        if not is_full_wordlist_found:
+            show_progress('.')
+            if is_cur_wordlist_valid:
+                # If we already searched for a complementary quintuple, then start over again.
                 cur_wordlist = get_initial_list(words9, w_j, w_k, w_q, w_x, w_z,
                                                 wordcount=target_wordcount - TUPLE_WORDCOUNT)
-        if not is_full_wordlist_found:
-            # if iter_count % 1000 == 0:
-            show_progress('.')
-            if constraint is None:  # Word-list invalid.  Try again.
+            else:
+                # If it has too many of some letters, then try a "minor" adjustment and continue.
                 excess_letters = [k for k, v in get_gap_histo(cur_wordlist).items() if v < 0]
                 if len(excess_letters) > 0:
                     remove_excess_letters(excess_letters, cur_wordlist)
