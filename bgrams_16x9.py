@@ -14,11 +14,11 @@ import sys
 import time
 
 # Added a limit of 250K pairs after hitting a MemoryError with ~290K  pairs (and ~1150 singletons) on 8GB of RAM.
-# (The highest load is in the computation of triples, and pair count is a better predictor of that than singleton count.)
+# Memory pressure has since been lessened, but retaining limit as a precaution.
 MAX_PAIR_COUNT = 250000
 
-PATH_LINUX_WORDS = '/usr/share/dict/linux.words'
-PATH_LOG_WORDLISTS = './bgrams.log'
+PATH_DICT = '/usr/share/dict/linux.words'
+PATH_LOG = './bgrams_16x9.log'
 PATH_WORDS9 = './bgrams9.txt'
 POOL_SIZE = 3
 TARGET_HISTO = collections.Counter({
@@ -39,20 +39,20 @@ TUPLE_PROGRESS_CHARS = ['a', 'b', 'c']
 TUPLE_WEIGHTS = [50, 35, 20]
 TUPLE_WORDCOUNT = 5
 
-PATH_LOG_WORDLISTS_TEST = './bgrams_test.log'
+PATH_LOG_TEST = './bgrams_16x9_test.log'
 PATH_WORDS9_TEST = './bgrams9_test.txt'
 TARGET_HISTO_TEST = collections.Counter({
     'a': 12, 'b': 2, 'c': 4, 'd': 5, 'e': 5,
-    'f': 0,  'g': 0, 'h': 0, 'i': 5, 'j': 1,
-    'k': 1,  'l': 1, 'm': 0, 'n': 1, 'o': 1,
-    'p': 0,  'q': 1, 'r': 2, 's': 2, 't': 4,
-    'u': 3,  'v': 2, 'w': 0, 'x': 1, 'y': 0,
+    'f': 0, 'g': 0, 'h': 0, 'i': 5, 'j': 1,
+    'k': 1, 'l': 1, 'm': 0, 'n': 1, 'o': 1,
+    'p': 0, 'q': 1, 'r': 2, 's': 2, 't': 4,
+    'u': 3, 'v': 2, 'w': 0, 'x': 1, 'y': 0,
     'z': 1
 })
 TARGET_WORDCOUNT_TEST = 6
 
 
-class WordCache():
+class WordCache:
     def __init__(self, words):
         self._primes = self._primes_less_than(102)
         # This value for _mod supports non-colliding hash
@@ -66,8 +66,9 @@ class WordCache():
             self._hash2anagrams[hash] = anagrams
 
     # From O'Reilly's Python Cookbook
-    def _primes_less_than(self, n):
-        aux = { }
+    @staticmethod
+    def _primes_less_than(n):
+        aux = {}
         return [aux.setdefault(p, p) for p in range(2, n)
                 if 0 not in [p % d for d in aux if p >= d + d]]
 
@@ -138,20 +139,18 @@ def chunks_of(items, chunk_size):
     return [items[i: i + chunk_size] for i in range(0, len(items), chunk_size)]
 
 
-def constraint_satisfaction_gap(constraint, counter):
+def constraint_satisfaction_gap_from_counter(constraint, counter):
     gap_counter = constraint.copy()
     gap_counter.subtract(counter)
-    if any(gap < 0 for gap in gap_counter.values()):
+    if any(gap_value < 0 for gap_value in gap_counter.values()):
         return None
     else:
         return gap_counter
 
 
 def constraint_satisfaction_gap_from_wordlist(constraint, words):
-    counter = collections.Counter()
-    for w in words:
-        counter += collections.Counter(w)
-    return constraint_satisfaction_gap(constraint, counter)
+    counter = get_counter_from_words(words)
+    return constraint_satisfaction_gap_from_counter(constraint, counter)
 
 
 def flatten(lsts):
@@ -160,6 +159,17 @@ def flatten(lsts):
     for lst in lsts:  # Or reversed(lsts)
         result[0:0] = lst
     return result
+
+
+def get_counter_from_words(words):
+    counter = collections.Counter()
+    for w in words:
+        counter += collections.Counter(w)
+    return counter
+
+
+def get_datestamp():
+    return time.strftime('[%Y-%m-%d @ %H:%M:%S]')
 
 
 def get_gap_histo(words):
@@ -211,89 +221,16 @@ def get_score(words) -> int:
     return result
 
 
-def get_singletons(constraint, words):
+def get_singletons(gap5, words):
     singletons = [(w, collections.Counter(w)) for w in words
-                  if is_constraint_satisfied(constraint, collections.Counter(w))]
+                  if is_constraint_satisfied(gap5, collections.Counter(w))]
     return singletons
 
 
-def get_datestamp():
-    return time.strftime('[%Y-%m-%d @ %H:%M:%S]')
-
-
-def get_tuples2_from_singletons(constraint, singletons1, singletons2):
-    pairs = [(w1, w2, c1 + c2)
-             for (w1, c1) in singletons1
-             for (w2, c2) in singletons2
-             if w2 > w1 and is_constraint_satisfied(constraint, c1 + c2)]
-    return pairs
-
-
-def get_tuples3_from_tuples2(constraint, singletons, tuples2, progress_char):
-    tuple2_chunks = chunks_of(tuples2, TUPLE_CHUNK_SIZE)
-    triple_chunks = []
-    for tuple2_chunk in tuple2_chunks:
-        triple_chunks.append(
-            [(w1, w2, w3, c12 + c3)
-             for (w1, w2, c12) in tuple2_chunk
-             for (w3, c3) in singletons
-             if w3 > w2 and is_constraint_satisfied(constraint, c12 + c3)]
-        )
-        if len(tuple2_chunk) == TUPLE_CHUNK_SIZE:
-            show_progress(progress_char.upper())
-        elif len(tuple2_chunk) < TUPLE_CHUNK_SIZE:
-            show_progress(progress_char.lower())
-        else:
-            show_progress('?')
-    triples = flatten(triple_chunks)
-    return triples
-
-
-def get_tuples4_from_tuples3(constraint, singletons, tuples3, progress_char):
-    tuple3_chunks = chunks_of(tuples3, TUPLE_CHUNK_SIZE)
-    quadruple_chunks = []
-    for tuple3_chunk in tuple3_chunks:
-        quadruple_chunks.append(
-            [(w1, w2, w3, w4, c123 + c4)
-             for (w1, w2, w3, c123) in tuple3_chunk
-             for (w4, c4) in singletons
-             if w4 > w3 and is_constraint_satisfied(constraint, c123 + c4)]
-        )
-        if len(tuple3_chunk) == TUPLE_CHUNK_SIZE:
-            show_progress(progress_char.upper())
-        elif len(tuple3_chunk) < TUPLE_CHUNK_SIZE:
-            show_progress(progress_char.lower())
-        else:
-            show_progress('?')
-    quadruples = flatten(quadruple_chunks)
-    return quadruples
-
-
-def get_tuples5_from_tuples4(constraint, singletons, tuples4, word_cache):
-    # Old version:
-    # quadruples = tuples4
-    # quintuples = [(w1, w2, w3, w4, w5)  # Do not return counters; they're no longer needed.
-    #               for (w1, w2, w3, w4, c1234) in quadruples
-    #               for (w5, c5) in singletons
-    #               if w5 > w4 and is_constraint_satisfied(constraint, c1234 + c5)]
-    # last_items = [w1, w2, w3, w4, c123 + c4)
-    # return quintuples
-    #
-    # More efficient, cache-enabled version:
-    quintuples = []
-    # singleton_words = list(map(lambda (s, c): s, singletons))
-    for (w1, w2, w3, w4, c1234) in tuples4:
-        # Direct subtraction doesn't track negative counts, but that's OK.
-        for w5 in word_cache.get_anagrams_by_counter(constraint - c1234):
-            # if w5 in singletons_words:
-            quintuples.append((w1, w2, w3, w4, w5))
-    return quintuples
-
-
-def get_quintuples_from_wordlist(words9, word_cache, constraint):
+def get_quintuples_from_wordlist(pool, words9, word_cache, cur_wordlist, gap5):
     show_progress('\n' + get_datestamp() + ' ')
 
-    singletons = get_singletons(constraint, words9)
+    singletons = get_singletons(gap5, words9)
     show_progress('{0}'.format(len(singletons)))
 
     # singleton_chunks = chunkify(singletons, multiprocessing.cpu_count() - 1)
@@ -305,36 +242,109 @@ def get_quintuples_from_wordlist(words9, word_cache, constraint):
     #     print('{0:s}:{1:d} '.format(prog_char, len(chunk)), end='')
     # show_progress(')')
 
-    # Below is the async version of: pairs = get_tuples2_from_singletons(constraint, singletons)
-    pair_chunk_asyncs = [pool.apply_async(get_tuples2_from_singletons, (constraint, singleton_chunk, singletons))
+    # Below is the async version of: pairs = get_tuples2_from_singletons(gap5, singletons)
+    pair_chunk_asyncs = [pool.apply_async(get_tuples2_from_singletons, (gap5, singleton_chunk, singletons))
                          for singleton_chunk in singleton_chunks]
     pair_chunks = [pair_chunk.get(timeout=None) for pair_chunk in pair_chunk_asyncs]
     pairs = flatten(pair_chunks)
     if len(pairs) > MAX_PAIR_COUNT:
-        print('\tAborting search for this wordlist.  Candidate pair count ({0}) exceeds max setting ({1}).'
+        print('\tAborting search for this wordlist.\n\tCandidate pair count ({0}) exceeds max setting ({1}).\n\t'
               .format(len(pairs), MAX_PAIR_COUNT)
               )
         pairs = []
     show_progress(', {0}:'.format(len(pairs)))
 
-    # Below is the async version of: triples = get_tuples3_from_tuples2(constraint, singletons, pairs)
+    # Below is the async version of: triples = get_tuples3_from_tuples2(gap5, singletons, pairs)
     triple_chunk_asyncs = [pool.apply_async(get_tuples3_from_tuples2,
-                                            (constraint, singleton_chunk, pairs, prog_char))
+                                            (gap5, singleton_chunk, pairs, prog_char))
                            for (singleton_chunk, prog_char) in singleton_chunks_with_progress_chars]
     triple_chunks = [triple_chunk.get(timeout=None) for triple_chunk in triple_chunk_asyncs]
     triples = flatten(triple_chunks)
     show_progress(', {0}:'.format(len(triples)))
 
-    # Below is the async version of: quadruples = get_tuples4_from_tuples3(constraint, singletons, triples)
+    # Below is the async version of: quadruples = get_tuples4_from_tuples3(gap5, singletons, triples)
     quadruple_chunk_asyncs = [pool.apply_async(get_tuples4_from_tuples3,
-                                               (constraint, singleton_chunk, triples, prog_char))
+                                               (gap5, singleton_chunk, triples, prog_char))
                               for (singleton_chunk, prog_char) in singleton_chunks_with_progress_chars]
     quadruples = flatten([quadruple_chunk.get(timeout=None) for quadruple_chunk in quadruple_chunk_asyncs])
     show_progress(', {0}'.format(len(quadruples)))
 
     # Caching saves us some time searching for the last item in e list.
-    quintuples = get_tuples5_from_tuples4(constraint, singletons, quadruples, word_cache)
+    quintuples = get_tuples5_from_tuples4(word_cache, cur_wordlist, gap5, quadruples)
     show_progress(', {0}'.format(len(quintuples)))
+    return quintuples
+
+
+def get_tuples2_from_singletons(gap5, singletons1, singletons2):
+    pairs = [(w1, w2, cntr1 + cntr2)
+             for (w1, cntr1) in singletons1
+             for (w2, cntr2) in singletons2
+             if w2 > w1 and is_constraint_satisfied(gap5, cntr1 + cntr2)]
+    return pairs
+
+
+def get_tuples3_from_tuples2(gap5, singletons, tuples2, progress_char):
+    tuple2_chunks = chunks_of(tuples2, TUPLE_CHUNK_SIZE)
+    triple_chunks = []
+    for tuple2_chunk in tuple2_chunks:
+        triple_chunks.append(
+            [(w1, w2, w3, cntr12 + cntr3)
+             for (w1, w2, cntr12) in tuple2_chunk
+             for (w3, cntr3) in singletons
+             if w3 > w2 and is_constraint_satisfied(gap5, cntr12 + cntr3)]
+        )
+        if len(tuple2_chunk) == TUPLE_CHUNK_SIZE:
+            show_progress(progress_char.upper())
+        elif len(tuple2_chunk) < TUPLE_CHUNK_SIZE:
+            show_progress(progress_char.lower())
+        else:
+            show_progress('?')
+    triples = flatten(triple_chunks)
+    return triples
+
+
+def get_tuples4_from_tuples3(gap5, singletons, tuples3, progress_char):
+    tuple3_chunks = chunks_of(tuples3, TUPLE_CHUNK_SIZE)
+    quadruple_chunks = []
+    for tuple3_chunk in tuple3_chunks:
+        quadruple_chunks.append(
+            [(w1, w2, w3, w4, cntr123 + cntr4)
+             for (w1, w2, w3, cntr123) in tuple3_chunk
+             for (w4, cntr4) in singletons
+             if w4 > w3 and is_constraint_satisfied(gap5, cntr123 + cntr4)]
+        )
+        if len(tuple3_chunk) == TUPLE_CHUNK_SIZE:
+            show_progress(progress_char.upper())
+        elif len(tuple3_chunk) < TUPLE_CHUNK_SIZE:
+            show_progress(progress_char.lower())
+        else:
+            show_progress('?')
+    quadruples = flatten(quadruple_chunks)
+    return quadruples
+
+
+def get_tuples5_from_tuples4(word_cache, cur_wordlist, gap5, tuples4):
+    # Note: cur_wordlist is not strictly necessary, but can be useful for testing/debugging.
+
+    # Old version:
+    # quadruples = tuples4
+    # quintuples = [(w1, w2, w3, w4, w5)  # Do not return counters; they're no longer needed.
+    #               for (w1, w2, w3, w4, cntr1234) in quadruples
+    #               for (w5, c5) in singletons
+    #               if w5 > w4 and is_constraint_satisfied(gap5, cntr1234 + cntr5)]
+    # last_items = [w1, w2, w3, w4, cntr123 + cntr4)
+    # return quintuples
+
+    # More efficient, cache-enabled version:
+    # (Note: This function is only a small portion of the script's overall runtime.)
+    quintuples = []
+    if len(tuples4) > 0:
+        for (w1, w2, w3, w4, cntr1234) in tuples4:
+            gap1 = gap5.copy()
+            gap1.subtract(cntr1234)
+            for w5 in word_cache.get_anagrams_by_counter(gap1):
+                # if w5 in singletons_words:
+                quintuples.append((w1, w2, w3, w4, w5))
     return quintuples
 
 
@@ -351,15 +361,15 @@ def is_constraint_satisfied(constraint, counter):
         return True
 
 
-def log_wordlist(path_log_wordlists, words):
+def log_wordlist(path_log, words):
     msg_log = '{0:d}: {1:s}'.format(len(words), words)
-    with open(path_log_wordlists, 'a') as f:
+    with open(path_log, 'a') as f:
         f.write(get_datestamp() + ' ' + msg_log + '\n')
 
 
 def normalize(weights):
     total = sum(weights)
-    normalized = [w/(1.0*total) for w in weights]
+    normalized = [w / (1.0 * total) for w in weights]
     return normalized
 
 
@@ -392,12 +402,11 @@ def show_progress(txt):
     print(txt, end='', flush=True)
 
 
-
 def write_words9(do_test) -> None:
     if do_test:
         w9 = ['aardvarks', 'abdicated', 'acquaints', 'actualize', 'aboideaux', 'adjective']
     else:
-        with open(PATH_LINUX_WORDS) as f:
+        with open(PATH_DICT) as f:
             lines = [line.rstrip('\n') for line in f]
             w9 = [line for line in lines
                   if line.islower() and len(line) == TARGET_WORDLENGTH]
@@ -408,12 +417,12 @@ def write_words9(do_test) -> None:
 
 def main(pool, parser_args):
     if parser_args.test:
-        path_log_wordlists = PATH_LOG_WORDLISTS_TEST
+        path_log = PATH_LOG_TEST
         path_words9 = PATH_WORDS9_TEST
         target_histo = TARGET_HISTO_TEST
         target_wordcount = TARGET_WORDCOUNT_TEST
     else:
-        path_log_wordlists = args.log_file.name
+        path_log = args.log_file.name
         path_words9 = args.input_file.name
         target_histo = TARGET_HISTO
         target_wordcount = TARGET_WORDCOUNT
@@ -445,14 +454,16 @@ def main(pool, parser_args):
     is_full_wordlist_found = False
     while not is_full_wordlist_found:
         iter_count += 1
-        constraint = constraint_satisfaction_gap_from_wordlist(target_histo, cur_wordlist)
-        is_cur_wordlist_valid = constraint is not None
+        cntr11 = get_counter_from_words(cur_wordlist)
+        gap5 = constraint_satisfaction_gap_from_counter(target_histo, cntr11)
+        is_cur_wordlist_valid = gap5 is not None
+
         if is_cur_wordlist_valid:
-            quintuples = get_quintuples_from_wordlist(words9, word_cache, constraint)
+            quintuples = get_quintuples_from_wordlist(pool, words9, word_cache, cur_wordlist, gap5)
             if len(quintuples) > 0:
                 for (w1, w2, w3, w4, w5) in quintuples:
                     full_list = cur_wordlist + [w1, w2, w3, w4, w5]
-                    log_wordlist(path_log_wordlists, full_list.__str__())
+                    log_wordlist(path_log, full_list.__str__())
                     print_wordlist('\n{0:s} Full {1:d}-word wordlist found!'.format(get_datestamp(), target_wordcount),
                                    full_list)
                 is_full_wordlist_found = True
@@ -477,8 +488,8 @@ def main(pool, parser_args):
 
 if __name__ == '__main__':
     # Early configuration sanity check
-    assert(POOL_SIZE == len(TUPLE_PROGRESS_CHARS))
-    assert(POOL_SIZE == len(TUPLE_WEIGHTS))
+    assert (POOL_SIZE == len(TUPLE_PROGRESS_CHARS))
+    assert (POOL_SIZE == len(TUPLE_WEIGHTS))
 
     parser = argparse.ArgumentParser(prog='bgrams')
     parser.add_argument('-i', '--input_file',
@@ -486,7 +497,7 @@ if __name__ == '__main__':
                         type=argparse.FileType('r'),
                         help='specify name of input file containing nine-letter words')
     parser.add_argument('-l', '--log_file',
-                        default=PATH_LOG_WORDLISTS,
+                        default=PATH_LOG,
                         type=argparse.FileType('a'),
                         help='specify name of logfile')
     parser.add_argument('-t', '--test',
@@ -502,4 +513,3 @@ if __name__ == '__main__':
     finally:
         pool.close()
         pool.join()
-
