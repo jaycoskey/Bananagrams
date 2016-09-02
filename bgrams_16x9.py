@@ -18,7 +18,8 @@ import time
 MAX_PAIR_COUNT = 250000
 
 PATH_DICT = '/usr/share/dict/linux.words'
-PATH_LOG = './bgrams_16x9.log'
+PATH_LOG_PROGRESS = './bgrams_16x9_progress.log'
+PATH_LOG_SOLUTIONS = './bgrams_16x9_solutions.log'
 PATH_WORDS9 = './bgrams9.txt'
 POOL_SIZE = 3
 TARGET_HISTO = collections.Counter({
@@ -39,7 +40,8 @@ TUPLE_PROGRESS_CHARS = ['a', 'b', 'c']
 TUPLE_WEIGHTS = [50, 35, 20]
 TUPLE_WORDCOUNT = 5
 
-PATH_LOG_TEST = './bgrams_16x9_test.log'
+PATH_LOG_PROGRESS_TEST = './bgrams_16x9_progress_test.log'
+PATH_LOG_SOLUTIONS_TEST = './bgrams_16x9_solutions_test.log'
 PATH_WORDS9_TEST = './bgrams9_test.txt'
 TARGET_HISTO_TEST = collections.Counter({
     'a': 12, 'b': 2, 'c': 4, 'd': 5, 'e': 5,
@@ -248,8 +250,9 @@ def get_quintuples_from_wordlist(pool, words9, word_cache, cur_wordlist, gap5):
     pair_chunks = [pair_chunk.get(timeout=None) for pair_chunk in pair_chunk_asyncs]
     pairs = flatten(pair_chunks)
     if len(pairs) > MAX_PAIR_COUNT:
-        print('\tAborting search for this wordlist.\n\tCandidate pair count ({0}) exceeds max setting ({1}).\n\t'
-              .format(len(pairs), MAX_PAIR_COUNT)
+        print('\tAborting search for this wordlist.\n\tCandidate pair count ({0}) exceeds max setting ({1}).'
+              .format(len(pairs), MAX_PAIR_COUNT),
+              end='\n\t'
               )
         pairs = []
     show_progress(', {0}:'.format(len(pairs)))
@@ -362,7 +365,7 @@ def is_constraint_satisfied(constraint, counter):
 
 
 def log_wordlist(path_log, words):
-    msg_log = '{0:d}: {1:s}'.format(len(words), words)
+    msg_log = '{0:s}'.format(words.__str__())
     with open(path_log, 'a') as f:
         f.write(get_datestamp() + ' ' + msg_log + '\n')
 
@@ -417,12 +420,14 @@ def write_words9(do_test) -> None:
 
 def main(pool, parser_args):
     if parser_args.test:
-        path_log = PATH_LOG_TEST
+        path_log_progress = PATH_LOG_PROGRESS_TEST
+        path_log_solutions = PATH_LOG_TEST
         path_words9 = PATH_WORDS9_TEST
         target_histo = TARGET_HISTO_TEST
         target_wordcount = TARGET_WORDCOUNT_TEST
     else:
-        path_log = args.log_file.name
+        path_log_progress = args.progress_file.name
+        path_log_solutions = args.log_file.name
         path_words9 = args.input_file.name
         target_histo = TARGET_HISTO
         target_wordcount = TARGET_WORDCOUNT
@@ -459,11 +464,12 @@ def main(pool, parser_args):
         is_cur_wordlist_valid = gap5 is not None
 
         if is_cur_wordlist_valid:
+            log_wordlist(path_log_progress, cur_wordlist)
             quintuples = get_quintuples_from_wordlist(pool, words9, word_cache, cur_wordlist, gap5)
             if len(quintuples) > 0:
                 for (w1, w2, w3, w4, w5) in quintuples:
                     full_list = cur_wordlist + [w1, w2, w3, w4, w5]
-                    log_wordlist(path_log, full_list.__str__())
+                    log_wordlist(path_log_solutions, full_list)
                     print_wordlist('\n{0:s} Full {1:d}-word wordlist found!'.format(get_datestamp(), target_wordcount),
                                    full_list)
                 is_full_wordlist_found = True
@@ -497,9 +503,13 @@ if __name__ == '__main__':
                         type=argparse.FileType('r'),
                         help='specify name of input file containing nine-letter words')
     parser.add_argument('-l', '--log_file',
-                        default=PATH_LOG,
+                        default=PATH_LOG_SOLUTIONS,
                         type=argparse.FileType('a'),
-                        help='specify name of logfile')
+                        help='specify name of file where solutions are logged')
+    parser.add_argument('-p', '--progress_file',
+                        default=PATH_LOG_PROGRESS,
+                        type=argparse.FileType('a'),
+                        help='specify name of file where progress indicators are logged')
     parser.add_argument('-t', '--test',
                         action='store_true',
                         help='run test version of script')
