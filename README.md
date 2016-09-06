@@ -18,23 +18,23 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
     * In the search for triples and quadruples, show progress for each subprocess executing an async call.
 * **Possible future ideas:**
   * Convert from async calls to a continuous data pipeline.
-**Result! (2016-08-27)**
-1.  adjuvants
-2.  anonymity
-3.  ataraxias
-4.  bottoming
-5.  bouzoukia
-6.  cathected
-7.  excelling
-8.  jeoparded
-9.  overkills
-10. prenotify
-11. qualifier
-12. quavering
-13. refurbish
-14. towheaded
-15. weeweeing
-16. zoosperms
+* **Result! (2016-08-27)**
+  1.  adjuvants
+  2.  anonymity
+  3.  ataraxias
+  4.  bottoming
+  5.  bouzoukia
+  6.  cathected
+  7.  excelling
+  8.  jeoparded
+  9.  overkills
+  10. prenotify
+  11. qualifier
+  12. quavering
+  13. refurbish
+  14. towheaded
+  15. weeweeing
+  16. zoosperms
  
 # 12-letter Bananagram Challenge:
 
@@ -74,7 +74,9 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
     (From 16 nine-letter words, since 16*9=144.)
   Is it possible to find 16 9-letter words and reach the maximum possible score?
   If not, what's the highest score that can be achieved?
-* I first assessed how computationally tractable the problem was, by finding lists of increasing length.
+* I first assessed how computationally tractable the problem was, by finding wordlists of increasing length.
   * 14-word lists of 9-letter words (that only use available tiles) would take a very long time to find.
   * 13-word lists can be found in a few minutes.
   * 12-word and 11-word lists can be found almost instantaneously.
+* Based on this timing information, I settled on an "11+5" strategy:
+  Find 11-word lists, and for each one of those, exhaustively search for a 5-word list that complements the 11-word list.
