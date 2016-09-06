@@ -7,7 +7,7 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
 # 9-letter Bananagram Challenge:
 
 * **Short version:** Find a 16-word list of 9-letter words (16x9), using the 144 Bananagram tiles.
-* **Strategy Overview:**
+* **Overview:**
   * Start with an 11-word "seed wordlist" that only uses the available tiles.
   * Repeatedly modify the seed wordlist by removing and adding words, until it stick within the available tiles.
   * Pay particular attention to the rarest tiles.  Specifically, there are only 2 each of: j, k, q, x, z. 
@@ -19,6 +19,7 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
 * **Possible future ideas:**
   * Convert from async calls to a continuous data pipeline.
 * **Result! (2016-08-27)**
+  <div class="decimal">
   1.  adjuvants
   2.  anonymity
   3.  ataraxias
@@ -35,13 +36,14 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
   14. towheaded
   15. weeweeing
   16. zoosperms
+  </style>
  
 # 12-letter Bananagram Challenge:
 
 * **Short version:** Find a 12-word list of 12-letter words (12x12), using the 144 Bananagram tiles.
 * **Note:** There are far fewer 12-letter words than there are 9-letter words.  It's not even currently
   clear (as of 2016-09-05) if there is a solution.
-* **Strategy Overview:**
+* **Overview:**
   * Search more aggressively than in the 9-letter case.
     Populate a cache of 4-word lists.
     I chose a cache size of 100,000,000.
@@ -60,7 +62,18 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
       * Possible solutions can be looked up by hash value in a separate run of the script, using the LOOKUP feature.
       * Due to hash collisions, the resulting 4-word list(s) found might not actually complement the 8-word list.
         * This is why the "solution" is called a "possible solution".
-
+* **Possible future ideas:**
+  * Modify the search to use async calls, or some other form of parallelism.
+  * For the hash function, I mapped the letters of the alphabet to consecutive prime numbers, multiplied them together, then took the result modulo 10^15.
+    This results in a hash of the set of letters that
+      (a) is independent of the order of letters, and
+      (b) could fit in a 64-bit int.
+    Unfortunately, the modulo operation leaves open but open the possibility of a hash collision.
+    The rate of hash collisions might be reduced or even eliminated if we applied two optimizations.
+    * Change the ordering of the mapping from letters to primes so that the most frequent letters (e.g., 'e') are mapped to the smallest primes (e.g., 2),
+      while the less frequent letters (e.g., 'q') are mapped to the larger primes.
+    * Since the words we hash don't contain the letters j, k, q, x, z, and w, we can use only the first 20 primes, from 2 to 71.
+    
 # Bananagram Challenge History
  
 * **Challenge:** Here is the original version of the challenge that I heard.
