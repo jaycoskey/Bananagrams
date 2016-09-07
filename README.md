@@ -70,10 +70,7 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
       (b) could fit in a 64-bit int.
     Unfortunately, the modulo operation leaves open but open the possibility of a hash collision.
     The rate of hash collisions might be reduced or even eliminated if we applied two optimizations.
-    * Change the ordering of the mapping from letters to primes so that the most frequent letters (e.g., 'e') are mapped to the smallest primes (e.g., 2),
-      while the less frequent letters (e.g., 'q') are mapped to the larger primes.
-    * Since the words we hash don't contain the letters j, k, q, x, z, and w, we can use only the first 20 primes, from 2 to 71.
-    
+
 # Bananagram Challenge History
  
 * **Challenge:** Here is the original version of the challenge that I heard.
@@ -92,4 +89,4 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
   * 13-word lists can be found in a few minutes.
   * 12-word and 11-word lists can be found almost instantaneously.
 * Based on this timing information, I settled on an "11+5" strategy:
-  Find 11-word lists, and for each one of those, exhaustively search for a 5-word list that complements the 11-word list.
+  Find 11-word lists and, for each one of those, exhaustively search for a 5-word list that complements the 11-word list.

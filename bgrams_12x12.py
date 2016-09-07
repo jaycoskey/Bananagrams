@@ -1,19 +1,20 @@
 #!/usr/bin/python3
 
 import argparse
+import ast
 import collections
 from functools import reduce
 import math
 import multiprocessing  # cpu_count, Pool
 from operator import mul
 from os import listdir
-from os.path import isfile, join
+from os.path import isdir, isfile, join
 import random
 import string
 import sys
 import time
 
-CACHE_DIR = 'cache'
+CACHE_DIR = 'bgrams_12x12_cache'
 CACHE_FILE_BASENAME = 'cache_'
 PATH_DICT = '/usr/share/dict/linux.words'
 PATH_LOG_PROGRESS = './bgrams_12x12_progress.log'
@@ -40,26 +41,17 @@ RARE_TILES = collections.Counter({
     'j': 2, 'k': 2, 'q': 2, 'x': 2, 'z': 2,
     'w': 3
 })
-
-# TARGET_WORDCOUNT = 12
 WORDLENGTH = 12
-# TUPLE_CHUNK_SIZE = 10000
-# TUPLE_PROGRESS_CHARS = ['a', 'b', 'c']
-
-# Given equal loads, the first pool starts and ends earlier (due to IO?), so give it more tuples to handle.
-# Would need to experiment to determine the optimal weighting.
-# TUPLE_WEIGHTS = [50, 35, 20]
-# TUPLE_WORDCOUNT = 5
 
 
 class WordlistCache:
-    def __init__(self):
-        self._primes = self._primes_less_than(102)
-        # This value for _mod supports non-colliding hash
-        # for 9 & 12-letter words.
-        self._mod = 1000000000000000  # 10^15 < Integer.MAX_VALUE (64 bits)
-        self._alpha2prime = self._get_alpha2prime(0, 1)
+    def __init__(self, cache_dir):
+        self._alpha2prime = self._get_alpha2prime_by_frequency()
+        self._cache_dir = cache_dir
+        if not isdir(self._cache_dir):
+            sys.exit('Error: \"{0:s}\" does not exist as a directory'.format(self._cache_dir))
         self._hashset = set()
+        self._mod = WordlistCache._get_modulus()
 
     def add(self, wordlist, do_cache):
         hash = self._wordlist2hash(wordlist)
@@ -67,7 +59,7 @@ class WordlistCache:
         if do_cache:
             path = self._hash2path(hash)
             with open(path, 'a+') as cache_file:
-                cache_file.write('{0:d} {1:s}\n'.format(hash, wordlist.__str__()))
+                cache_file.write('{0:d}:{1:s}\n'.format(hash, wordlist.__str__()))
 
     def counter2hash(self, counter: collections.Counter):
         return reduce(mul, [self._alpha2prime[c] ** v for c, v in counter.items()]) % self._mod
@@ -89,7 +81,7 @@ class WordlistCache:
             with open(cache_path, 'r') as cache_file:
                 lines = cache_file.readlines()
                 for line in lines:
-                    parts = line.split(' ', 1)
+                    parts = line.split(':', 1)
                     line_hash = parts[0]
                     self._hashset.add(int(line_hash))
             cache_files_read += 1
@@ -99,22 +91,60 @@ class WordlistCache:
                 show_progress('c')
         print('')
 
-    def lookup_hash(self, target_hash):
+    def lookup_hash_lines(self, target_hash):
         result = []
         path = self._hash2path(target_hash)
         with open(path, 'r') as cache_file:
             lines = cache_file.readlines()
             for line in lines:
-                parts = line.split(' ', 1)
+                parts = line.split(':', 1)
                 line_hash = parts[0]
                 # wordlist = parts[1]
                 if int(line_hash) == target_hash:
                     result.append(line)
         return result
 
+    def lookup_hash_wordlists(self, target_hash):
+        lines = self.lookup_hash_lines(target_hash)
+
+        def line2wordlist(line):
+            parts = line.split(':')
+            wordlist_str = parts[1]
+            return ast.literal_eval(wordlist_str)
+        return map(line2wordlist, lines)
+
+    # primes: 2, 3, 5, ..., 67, 71, 73, 79, 83, 89, 97, 101
     @staticmethod
-    def _hash2path(hash):
-        return CACHE_DIR + '/' + CACHE_FILE_BASENAME + str(hash % 10000).zfill(4)
+    def _get_alpha2prime_by_frequency():
+        alpha2prime = {
+            'e': 2, 's': 3, 'i': 5, 'a': 7, 'r': 11,
+            'n': 13, 't': 17, 'o': 19, 'l': 23, 'd': 29,
+            'c': 31, 'u': 37, 'g': 41, 'p': 43, 'm': 47,
+            'h': 53, 'b': 59, 'y': 61, 'f': 67, 'v': 71,
+            'w': 73
+        }
+        return alpha2prime
+
+    @staticmethod
+    def _get_alpha2prime_lexicographic(p_init, p_step):
+        alphabet = string.ascii_lowercase[:26]
+        primes = WordlistCache._primes_less_than(102)
+        alpha2prime = {}
+        for i in range(0, 26):
+            alpha2prime[alphabet[i]] = primes[p_init + p_step * i]
+        return alpha2prime
+
+    # Modulus = One billion supports non-colliding hashes for 9 & 12-letter words,
+    # but hash collisions are likely inevitable for the prime multiplication technique with any hash < LONG_MAX.
+    @staticmethod
+    def _get_modulus():
+        # billion = 1000000000  # 10^9
+        # trillion = 1000000000000  # 10^12
+        # quadrillion = 1000000000000000  # 10^15
+        return int(math.pow(2, 63))
+
+    def _hash2path(self, hash):
+        return self._cache_dir + '/' + CACHE_FILE_BASENAME + str(hash % 10000).zfill(4)
 
     @staticmethod
     def _primes_less_than(n):
@@ -123,16 +153,10 @@ class WordlistCache:
         return [aux.setdefault(p, p) for p in range(2, n)
                 if 0 not in [p % d for d in aux if p >= d + d]]
 
-    def _get_alpha2prime(self, p_init, p_step):
-        alphabet = string.ascii_lowercase[:26]
-        alpha2prime = {}
-        for i in range(0, 26):
-            alpha2prime[alphabet[i]] = self._primes[p_init + p_step * i]
-        return alpha2prime
-
     def _wordlist2hash(self, wordlist):
         chars = ''.join(wordlist)
-        return reduce(mul, [self._alpha2prime[c] for c in chars]) % self._mod
+        hash = reduce(mul, [self._alpha2prime[c] for c in chars]) % self._mod
+        return hash
 
 
 def chunk_by_weight(items, weights):
@@ -208,7 +232,7 @@ def get_initial_wordlist8(w_j, w_k, w_q, w_z, w_x, w_w):
     del wordlist[i1]
     del wordlist[i2]
     del wordlist[i3]
-    return wordlist # [:wordcount]
+    return wordlist  # [:wordcount]
 
 
 def get_counter_from_wordlist(words):
@@ -371,14 +395,15 @@ def get_wordlist8(w_j, w_k, w_q, w_x, w_z, w_w,
             return cur_wordlist[:8]
 
 
-def log_wordlist_and_hash(path_log, words, hash):
-    msg_log = '{0:s} {1:s} {2:d}'.format(get_datestamp(), words.__str__(), hash)
+def log_wordlist_plus(path_log, hash, words, cache_lookup_count):
+    msg_log = '{0:s};{1:d};{2:s};{3:d}'.format(get_datestamp(), hash, words.__str__(), cache_lookup_count)
     with open(path_log, 'a') as f:
         f.write(msg_log + '\n')
 
 
 def main(pool, parser_args):
     args_cache = parser_args.cache
+    args_cache_dir = parser_args.cache_dir
     args_lookup = parser_args.lookup
     args_search = parser_args.search
 
@@ -386,9 +411,9 @@ def main(pool, parser_args):
     w_others = [w for w in words12
                 if w.count('j') == 0 and w.count('k') == 0 and w.count('q') == 0 and
                 w.count('x') == 0 and w.count('z') == 0 and w.count('w') == 0]
-    cache4 = WordlistCache()
+    cache4 = WordlistCache(args_cache_dir)
     if args_lookup > 0:
-        wordlist4s = cache4.lookup_hash(args_lookup)
+        wordlist4s = cache4.lookup_hash_lines(args_lookup)
         for wordlist4 in wordlist4s:
             print('{0:s}'.format(wordlist4.__str__()))
     elif args_cache > 0:
@@ -397,6 +422,7 @@ def main(pool, parser_args):
         search(cache4, words12, w_others)
 
 
+# Note: Actual count of items cached is floor(n/POOL_SIZE)
 def populate_cache(pool, w_others, cache4, n):
     chunk_size = int(n / POOL_SIZE)
     async4s = [pool.apply_async(get_valid_wordlist4s, (w_others, chunk_size))
@@ -461,7 +487,7 @@ def search(cache4, words12, w_others):
     w_wz = [w for w in words12 if w.count('w') == 1 and w.count('z') == 1]
     w_xz = [w for w in words12 if w.count('x') == 1 and w.count('z') == 1]
 
-    cache_lookups = 0
+    cache_lookup_count = 0
     while True:
         wordlist8 = get_wordlist8(w_j, w_k, w_q, w_x, w_z, w_w,
                                   w_k1, w_z1, w_w1,
@@ -473,13 +499,15 @@ def search(cache4, words12, w_others):
         if any(gap_values < 0 for gap_values in gap4.values()):
             continue
         if cache4.has_hash_of_counter(gap4):
-            print_wordlist('\nPossible solution found:', wordlist8)
             hash = cache4.counter2hash(gap4)
-            log_wordlist_and_hash(PATH_LOG_SOLUTIONS, wordlist8, hash)
-        cache_lookups += 1
-        if cache_lookups % 100000 == 0:
+            print_wordlist('\nPossible solution found (hash={0:d}:'.format(hash), wordlist8)
+
+            log_wordlist_plus(PATH_LOG_SOLUTIONS, hash, wordlist8, cache_lookup_count)
+            cache_lookup_count = 0
+        cache_lookup_count += 1
+        if cache_lookup_count % 100000 == 0:
             show_progress('K')
-        elif cache_lookups % 1000 == 0:
+        elif cache_lookup_count % 1000 == 0:
             show_progress('k')
 
 
@@ -505,6 +533,9 @@ if __name__ == '__main__':
                         default=0,
                         type=int,
                         help='number of 4-word lists to append to hash cache files')
+    parser.add_argument('--cache_dir',
+                        default=CACHE_DIR,
+                        help='directory where cache is stored')
     parser.add_argument('--lookup',
                         default=0,
                         type=int,
