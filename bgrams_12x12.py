@@ -35,7 +35,7 @@ COMMON_TILES = collections.Counter({
     'f': 3,  'g': 4, 'h': 3, 'i': 12,
              'l': 5, 'm': 3, 'n': 8, 'o': 11,
     'p': 3,          'r': 9, 's': 6, 't': 9,
-    'u': 6,  'v': 3,                 'y': 3,
+    'u': 6,  'v': 3, 'w': 3,         'y': 3,
 })
 RARE_TILES = collections.Counter({
     'j': 2, 'k': 2, 'q': 2, 'x': 2, 'z': 2,
@@ -117,11 +117,12 @@ class WordlistCache:
     @staticmethod
     def _get_alpha2prime_by_frequency():
         alpha2prime = {
-            'e': 2, 's': 3, 'i': 5, 'a': 7, 'r': 11,
+            'e':  2, 's':  3, 'i':  5, 'a':  7, 'r': 11,
             'n': 13, 't': 17, 'o': 19, 'l': 23, 'd': 29,
             'c': 31, 'u': 37, 'g': 41, 'p': 43, 'm': 47,
             'h': 53, 'b': 59, 'y': 61, 'f': 67, 'v': 71,
-            'w': 73
+            'w': 73,
+            'j':  0, 'k':  0, 'q':  0, 'x':  0, 'z':  0
         }
         return alpha2prime
 
@@ -205,36 +206,6 @@ def get_datestamp():
     return time.strftime('[%Y-%m-%d @ %H:%M:%S]')
 
 
-def get_initial_wordlist8(w_j, w_k, w_q, w_z, w_x, w_w):
-    rand_j0 = get_rand_item(w_j)
-    rand_k0 = get_rand_item(w_k)
-    rand_q0 = get_rand_item(w_q)
-    rand_x0 = get_rand_item(w_x)
-    rand_z0 = get_rand_item(w_z)
-    rand_w0 = get_rand_item(w_w)
-
-    rand_j1 = get_rand_item(w_j)
-    rand_k1 = get_rand_item(w_k)
-    rand_q1 = get_rand_item(w_q)
-    rand_x1 = get_rand_item(w_x)
-    rand_z1 = get_rand_item(w_z)
-    rand_w1 = get_rand_item(w_w)
-
-    wordlist = [rand_j0, rand_k0, rand_q0, rand_x0, rand_z0, rand_w0,
-                rand_j1, rand_k1, rand_q1, rand_x1, rand_z1, rand_w1
-                ]
-    # Remove a random selection of 4
-    i0 = random.randint(0, 11)
-    i1 = random.randint(0, 10)
-    i2 = random.randint(0, 9)
-    i3 = random.randint(0, 8)
-    del wordlist[i0]
-    del wordlist[i1]
-    del wordlist[i2]
-    del wordlist[i3]
-    return wordlist  # [:wordcount]
-
-
 def get_counter_from_wordlist(words):
     counter = collections.Counter()
     for w in words:
@@ -242,15 +213,39 @@ def get_counter_from_wordlist(words):
     return counter
 
 
+def get_initial_wordlist8(w_j, w_k, w_q, w_z, w_x):
+    rand_j0 = get_rand_item(w_j)
+    rand_k0 = get_rand_item(w_k)
+    rand_q0 = get_rand_item(w_q)
+    rand_x0 = get_rand_item(w_x)
+    rand_z0 = get_rand_item(w_z)
+
+    rand_j1 = get_rand_item(w_j)
+    rand_k1 = get_rand_item(w_k)
+    rand_q1 = get_rand_item(w_q)
+    rand_x1 = get_rand_item(w_x)
+    rand_z1 = get_rand_item(w_z)
+
+    wordlist = [rand_j0, rand_k0, rand_q0, rand_x0, rand_z0,
+                rand_j1, rand_k1, rand_q1, rand_x1, rand_z1
+                ]
+    # Remove a random selection of 4
+    i0 = random.randint(0, 9)
+    i1 = random.randint(0, 8)
+    del wordlist[i0]
+    del wordlist[i1]
+    return wordlist  # [:wordcount]
+
+
 def get_rand_item(words) -> str:
     return random.choice(words)
 
 
-def get_valid_wordlist4s(w_others, num_wordlists):
+def get_valid_wordlist4s(w_w1, w_others, num_wordlists):
     valid_wordlist4s = []
     while len(valid_wordlist4s) < num_wordlists:
-        wordlist4 = [get_rand_item(w_others), get_rand_item(w_others),
-                     get_rand_item(w_others), get_rand_item(w_others)]
+        wordlist4 = [get_rand_item(w_w1), get_rand_item(w_w1),
+                     get_rand_item(w_w1), get_rand_item(w_others)]
         cntr4 = get_counter_from_wordlist(wordlist4)
         gap8 = constraint_satisfaction_gap_from_counter(COMMON_TILES, cntr4)
         if all(gap_values >= 0 for gap_values in gap8.values()):
@@ -262,137 +257,169 @@ def get_valid_wordlist4s(w_others, num_wordlists):
 # It returns an 8-word list that ideally contains the right number of
 #     j's, k's, q's, x's, z's (2 each), and w's (3)
 # The caller checks to see if the wordlist return is actually usable.
-def get_wordlist8(w_j, w_k, w_q, w_x, w_z, w_w,
-                  w_k1, w_z1, w_w1,
-                  w_k2, w_z2, w_w2,
-                  w_jz, w_kq, w_kw, w_qz, w_wz, w_xz,
-                  w_others):
+def get_wordlist8(w_j, w_k, w_q, w_x, w_z,
+                        w_k1, w_z1,
+                        w_k2, w_z2,
+                        w_jz, w_kq, w_qz, w_wz, w_xz,
+                        w_others):
     is_found = False
     while not is_found:
-        cur_wordlist = get_initial_wordlist8(w_j, w_k, w_q, w_x, w_z, w_w)
-        gap_init = constraint_satisfaction_gap_from_wordlist(RARE_TILES, cur_wordlist)
-        if random.randint(0, 1) == 1:
-            cur_wordlist[:] = cur_wordlist[4:8] + cur_wordlist[0:4]
+        cur_wordlist = get_initial_wordlist8(w_j, w_k, w_q, w_x, w_z)
+        iter_count = 0
+        while iter_count < 3:
+            iter_count += 1
+            gap_init = constraint_satisfaction_gap_from_wordlist(RARE_TILES, cur_wordlist)
+            swap_point = random.randint(0, 7)
+            if swap_point > 0:
+                cur_wordlist[:] = cur_wordlist[swap_point:8] + cur_wordlist[0:swap_point]
+            if random.randint(0, 1) == 1:
+                cur_wordlist.reverse()
 
-        # Remove words to resolve excesses of key letters
-        for word in cur_wordlist:
-            if gap_init['j'] < 0 and 'j' in word:
-                cur_wordlist.remove(word)
-                gap_init['j'] = 0
-                continue
-            elif gap_init['k'] < 0 and 'k' in word:
-                cur_wordlist.remove(word)
-                gap_init['k'] = 0
-                continue
-            elif gap_init['q'] < 0 and 'q' in word:
-                cur_wordlist.remove(word)
-                gap_init['q'] = 0
-                continue
-            elif gap_init['x'] < 0 and 'x' in word:
-                cur_wordlist.remove(word)
-                gap_init['x'] = 0
-                continue
-            elif gap_init['z'] < 0 and 'z' in word:
-                cur_wordlist.remove(word)
-                gap_init['z'] = 0
-                continue
-            elif gap_init['w'] < 0 and 'w' in word:
-                cur_wordlist.remove(word)
-                gap_init['w'] = 0
-                continue
-        gap = constraint_satisfaction_gap_from_wordlist(BANANAGRAM_TILES, cur_wordlist)
-        if any(gap_value < 0 for gap_value in gap.values()):
-            continue    # Haven't resolved all the excesses yet
+            # Remove words to resolve excesses of rare letters
+            for word in cur_wordlist:
+                if gap_init['j'] < 0 and 'j' in word:
+                    # print('INFO: Wordlist={0:s}'.format(cur_wordlist.__str__()))
+                    # print('INFO: Removing excess j word: {0:s}'.format(word))
+                    cur_wordlist.remove(word)
+                    gap_init['j'] = 0  # Simplification
+                    continue
+                elif gap_init['k'] < 0 and 'k' in word:
+                    # print('INFO: Wordlist={0:s}'.format(cur_wordlist.__str__()))
+                    # print('INFO: Removing excess k word: {0:s}'.format(word))
+                    cur_wordlist.remove(word)
+                    gap_init['k'] = 0  # Simplification
+                    continue
+                elif gap_init['q'] < 0 and 'q' in word:
+                    # print('INFO: Wordlist={0:s}'.format(cur_wordlist.__str__()))
+                    # print('INFO: Removing excess q word: {0:s}'.format(word))
+                    cur_wordlist.remove(word)
+                    gap_init['q'] = 0  # Simplification
+                    continue
+                elif gap_init['x'] < 0 and 'x' in word:
+                    # print('INFO: Wordlist={0:s}'.format(cur_wordlist.__str__()))
+                    # print('INFO: Removing excess x word: {0:s}'.format(word))
+                    cur_wordlist.remove(word)
+                    gap_init['x'] = 0  # Simplification
+                    continue
+                elif gap_init['z'] < 0 and 'z' in word:
+                    # print('INFO: Wordlist={0:s}'.format(cur_wordlist.__str__()))
+                    # print('INFO: Removing excess z word: {0:s}'.format(word))
+                    cur_wordlist.remove(word)
+                    gap_init['z'] = 0  # Simplification
+                    continue
+            gap = constraint_satisfaction_gap_from_wordlist(BANANAGRAM_TILES, cur_wordlist)
+            if any(gap_value < 0 for gap_value in gap.values()):
+                break    # Haven't resolved all the excesses yet
 
-        gap_key_count = len([k for k in gap.keys() if k in 'jkqxzw'])
-        word_count = len(cur_wordlist)
+            gap_key_count = len([k for k in gap.keys() if k in 'jkqxz'])
+            word_count = len(cur_wordlist)
 
-        if word_count == 8 and gap_key_count == 0:
-            return cur_wordlist
-        elif word_count == 7:
-            if gap_key_count == 0:
+            if word_count == 8 and gap_key_count == 0:
+                is_found = True
+                break
+            if word_count == 7 and gap_key_count == 0:
                 cur_wordlist.append(get_rand_item(w_others))
-                return cur_wordlist
-            if gap_key_count == 1:
+                is_found = True
+                break
+            if word_count == 8 and gap_key_count == 1:
+                if gap['k'] == 1:  # Replace 'k'=>'kk'  or 'q'=>'kq'
+                    for i in range(0, len(cur_wordlist)):
+                        if cur_wordlist[i].count('k') == 1:
+                            cur_wordlist[i] = get_rand_item(w_k2)
+                            break
+                        elif cur_wordlist[i].count('k') == 0 and cur_wordlist[i].count('q') == 1:
+                            cur_wordlist[i] = get_rand_item(w_kq)
+                            break
+                if gap['x'] == 1:  # Replace 'z'=>'xz'
+                    for i in range(0, len(cur_wordlist)):
+                        if cur_wordlist[i].count('x') == 0 and cur_wordlist[i].count('z') == 1:
+                            cur_wordlist[i] = get_rand_item(w_xz)
+                            break
+                if gap['z'] == 1:  # Replace 'j'=>'jz' or 'x'=>'xz', or 'z' => 'zz'
+                    for i in range(0, len(cur_wordlist)):
+                        if cur_wordlist[i].count('z') == 0 and cur_wordlist[i].count('j') == 1:
+                            cur_wordlist[i] = get_rand_item(w_jz)
+                            break
+                        elif cur_wordlist[i].count('z') == 0 and cur_wordlist[i].count('x') == 1:
+                            cur_wordlist[i] = get_rand_item(w_xz)
+                            break
+                        elif cur_wordlist[i].count('z') == 1:
+                            cur_wordlist[i] = get_rand_item(w_z2)
+                            break
+            elif word_count == 7:
+                if gap_key_count == 0:
+                    cur_wordlist.append(get_rand_item(w_others))
+                    is_found = True
+                    break
+                if gap_key_count >= 2:
+                    if gap['j'] == 1 and gap['z'] == 1:
+                        cur_wordlist.append(get_rand_item(w_jz))
+                    elif gap['k'] == 1 and gap['q'] == 1:
+                        cur_wordlist.append(get_rand_item(w_kq))
+                    # elif gap['k'] == 1 and gap['w'] == 1:
+                    #     cur_wordlist.append(get_rand_item(w_kw))
+                    #     return cur_wordlist
+                    elif gap['q'] == 1 and gap['z'] == 1:
+                        cur_wordlist.append(get_rand_item(w_qz))
+                    elif gap['w'] == 1 and gap['z'] == 1:
+                        cur_wordlist.append(get_rand_item(w_wz))
+                    elif gap['x'] == 1 and gap['z'] == 1:
+                        cur_wordlist.append(get_rand_item(w_xz))
                 if gap['j'] == 1:
                     cur_wordlist.append(get_rand_item(w_j))
-                    return cur_wordlist
                 elif gap['k'] == 1:
                     cur_wordlist.append(get_rand_item(w_k1))
-                    return cur_wordlist
                 elif gap['q'] == 1:
                     cur_wordlist.append(get_rand_item(w_q))
-                    return cur_wordlist
                 elif gap['x'] == 1:
                     cur_wordlist.append(get_rand_item(w_x))
-                    return cur_wordlist
                 elif gap['z'] == 1:
                     cur_wordlist.append(get_rand_item(w_z1))
-                    return cur_wordlist
-                elif gap['w'] == 1:
-                    cur_wordlist.append(get_rand_item(w_w1))
-                    return cur_wordlist
                 elif gap['k'] == 2:
                     cur_wordlist.append(get_rand_item(w_k2))
-                    return cur_wordlist
-                elif gap['w'] == 2:
-                    cur_wordlist.append(get_rand_item(w_w2))
-                    return cur_wordlist
                 elif gap['z'] == 2:
                     cur_wordlist.append(get_rand_item(w_z2))
-                    return cur_wordlist
-            if gap_key_count == 2:
-                if gap['j'] == 1 and gap['z'] == 1:
-                    cur_wordlist.append(get_rand_item(w_jz))
-                    return cur_wordlist
-                elif gap['k'] == 1 and gap['q'] == 1:
-                    cur_wordlist.append(get_rand_item(w_kq))
-                    return cur_wordlist
-                elif gap['k'] == 1 and gap['w'] == 1:
-                    cur_wordlist.append(get_rand_item(w_kw))
-                    return cur_wordlist
-                elif gap['q'] == 1 and gap['z'] == 1:
-                    cur_wordlist.append(get_rand_item(w_qz))
-                    return cur_wordlist
-                elif gap['w'] == 1 and gap['z'] == 1:
-                    cur_wordlist.append(get_rand_item(w_wz))
-                    return cur_wordlist
-                elif gap['x'] == 1 and gap['z'] == 1:
-                    cur_wordlist.append(get_rand_item(w_xz))
-                    return cur_wordlist
-        elif word_count < 7:
-            if gap_key_count == 1:
-                if gap['j'] == 1:
-                    cur_wordlist.append(get_rand_item(w_j))
-                if gap['k'] == 1:
-                    cur_wordlist.append(get_rand_item(w_k1))
-                if gap['q'] == 1:
-                    cur_wordlist.append(get_rand_item(w_q))
-                if gap['x'] == 1:
-                    cur_wordlist.append(get_rand_item(w_x))
-                if gap['z'] == 1:
-                    cur_wordlist.append(get_rand_item(w_z1))
-                if gap['w'] == 1:
-                    cur_wordlist.append(get_rand_item(w_w1))
-                if gap['k'] == 2:
-                    cur_wordlist.append(get_rand_item(w_k2))
-                if gap['w'] == 2:
-                    cur_wordlist.append(get_rand_item(w_w2))
-                if gap['z'] == 2:
-                    cur_wordlist.append(get_rand_item(w_z2))
-            elif gap_key_count >= 2:
-                if gap['j'] == 1 and gap['z'] == 1:
-                    cur_wordlist.append(get_rand_item(w_jz))
-                if gap['k'] == 1 and gap['q'] == 1:
-                    cur_wordlist.append(get_rand_item(w_kq))
-                if gap['k'] == 1 and gap['w'] == 1:
-                    cur_wordlist.append(get_rand_item(w_kw))
-                if gap['q'] == 1 and gap['z'] == 1:
-                    cur_wordlist.append(get_rand_item(w_qz))
-                if gap['x'] == 1 and gap['z'] == 1:
-                    cur_wordlist.append(get_rand_item(w_xz))
-        if len(cur_wordlist) >= 8:
-            return cur_wordlist[:8]
+            elif word_count < 7:
+                if gap_key_count >= 2:
+                    if gap['j'] == 1 and gap['z'] == 1:
+                        cur_wordlist.append(get_rand_item(w_jz))
+                    if gap['k'] == 1 and gap['q'] == 1:
+                        cur_wordlist.append(get_rand_item(w_kq))
+                    if gap['q'] == 1 and gap['z'] == 1:
+                        cur_wordlist.append(get_rand_item(w_qz))
+                    if gap['x'] == 1 and gap['z'] == 1:
+                        cur_wordlist.append(get_rand_item(w_xz))
+                if gap_key_count == 1:
+                    if gap['j'] == 1:
+                        cur_wordlist.append(get_rand_item(w_j))
+                    if gap['k'] == 1:
+                        cur_wordlist.append(get_rand_item(w_k1))
+                    if gap['q'] == 1:
+                        cur_wordlist.append(get_rand_item(w_q))
+                    if gap['x'] == 1:
+                        cur_wordlist.append(get_rand_item(w_x))
+                    if gap['z'] == 1:
+                        cur_wordlist.append(get_rand_item(w_z1))
+                    if gap['k'] == 2:
+                        cur_wordlist.append(get_rand_item(w_k2))
+                    if gap['z'] == 2:
+                        cur_wordlist.append(get_rand_item(w_z2))
+
+            if len(cur_wordlist) >= 8:
+                cur_wordlist = cur_wordlist[:8]
+                
+            cntr_final = collections.Counter(''.join(cur_wordlist))
+            if (len(cur_wordlist) == 8 and cntr_final['j'] == 2 and cntr_final['k'] == 2 and
+                        cntr_final['q'] == 2 and cntr_final['x'] == 2 and cntr_final['z'] == 2):
+                # gap_final = constraint_satisfaction_gap_from_wordlist(BANANAGRAM_TILES, cur_wordlist)
+                # if all(gap_values >= 0 for gap_values in gap_final.values()):
+                return cur_wordlist
+            else:
+                pass  # Continue attempt to modify wordlist
+        if not is_found:
+            # print('INFO: Passing on iter_count={0:d}: {1:s}'.format(iter_count, cur_wordlist.__str__()))
+            pass
+    return cur_wordlist
 
 
 def log_wordlist_plus(path_log, hash, words, cache_lookup_count):
@@ -408,24 +435,27 @@ def main(pool, parser_args):
     args_search = parser_args.search
 
     words12 = read_words12(PATH_WORDS12)
-    w_others = [w for w in words12
-                if w.count('j') == 0 and w.count('k') == 0 and w.count('q') == 0 and
-                w.count('x') == 0 and w.count('z') == 0 and w.count('w') == 0]
     cache4 = WordlistCache(args_cache_dir)
     if args_lookup > 0:
         wordlist4s = cache4.lookup_hash_lines(args_lookup)
         for wordlist4 in wordlist4s:
             print('{0:s}'.format(wordlist4.__str__()))
     elif args_cache > 0:
-        populate_cache(pool, w_others, cache4, args_cache)
+        populate_cache(pool, words12, cache4, args_cache)
     elif args_search:
-        search(cache4, words12, w_others)
+        search(cache4, words12)
 
 
 # Note: Actual count of items cached is floor(n/POOL_SIZE)
-def populate_cache(pool, w_others, cache4, n):
+def populate_cache(pool, words12, cache4, n):
+    w_commons = [w for w in words12
+                 if w.count('j') == 0 and w.count('k') == 0 and w.count('q') == 0 and
+                 w.count('x') == 0 and w.count('z') == 0
+                 ]
+    w_w1 = [w for w in w_commons if w.count('w') == 1]
+    w_others = [w for w in w_commons if w.count('w') == 0]
     chunk_size = int(n / POOL_SIZE)
-    async4s = [pool.apply_async(get_valid_wordlist4s, (w_others, chunk_size))
+    async4s = [pool.apply_async(get_valid_wordlist4s, (w_w1, w_others, chunk_size))
                for proc in ['a', 'b', 'c']]
     wordlist4s = flatten([async4.get(timeout=None) for async4 in async4s])
     for wordlist4 in wordlist4s:
@@ -458,46 +488,51 @@ def remove_excess_letters(letters, words):
                 break
 
 
-def search(cache4, words12, w_others):
+def search(cache4, words12):
     cache4.load_keys()
     print('Cache has {0:d} keys'.format(cache4.key_count()))
 
-    w_j = [w for w in words12 if w.count('j') > 0]
-    w_k = [w for w in words12 if w.count('k') > 0]
-    w_q = [w for w in words12 if w.count('q') > 0]
-    w_x = [w for w in words12 if w.count('x') > 0]
-    w_z = [w for w in words12 if w.count('z') > 0]
-    w_w = [w for w in words12 if w.count('w') > 0]
+    w_w0 = [w for w in words12 if w.count('w') == 0]
+    w_j = [w for w in w_w0 if w.count('j') > 0]
+    w_k = [w for w in w_w0 if w.count('k') > 0]
+    w_q = [w for w in w_w0 if w.count('q') > 0]
+    w_x = [w for w in w_w0 if w.count('x') > 0]
+    w_z = [w for w in w_w0 if w.count('z') > 0]
+    # w_w = [w for w in words12 if w.count('w') > 0]
 
-    w_j1 = [w for w in words12 if w.count('j') == 1]
-    w_k1 = [w for w in words12 if w.count('k') == 1]
-    w_q1 = [w for w in words12 if w.count('q') == 1]
-    w_x1 = [w for w in words12 if w.count('x') == 1]
-    w_z1 = [w for w in words12 if w.count('z') == 1]
-    w_w1 = [w for w in words12 if w.count('w') == 1]
+    w_j1 = [w for w in w_w0 if w.count('j') == 1]
+    w_k1 = [w for w in w_w0 if w.count('k') == 1]
+    w_q1 = [w for w in w_w0 if w.count('q') == 1]
+    w_x1 = [w for w in w_w0 if w.count('x') == 1]
+    w_z1 = [w for w in w_w0 if w.count('z') == 1]
 
-    w_k2 = [w for w in words12 if w.count('k') == 2]
-    w_w2 = [w for w in words12 if w.count('w') == 2]
-    w_z2 = [w for w in words12 if w.count('z') == 2]
+    w_k2 = [w for w in w_w0 if w.count('k') == 2]
+    w_z2 = [w for w in w_w0 if w.count('z') == 2]
 
-    w_jz = [w for w in words12 if w.count('j') == 1 and w.count('z') == 1]
-    w_kq = [w for w in words12 if w.count('k') == 1 and w.count('q') == 1]
-    w_kw = [w for w in words12 if w.count('k') == 1 and w.count('w') == 1]
-    w_qz = [w for w in words12 if w.count('q') == 1 and w.count('z') == 1]
-    w_wz = [w for w in words12 if w.count('w') == 1 and w.count('z') == 1]
-    w_xz = [w for w in words12 if w.count('x') == 1 and w.count('z') == 1]
+    w_jz = [w for w in w_w0 if w.count('j') == 1 and w.count('z') == 1]
+    w_kq = [w for w in w_w0 if w.count('k') == 1 and w.count('q') == 1]
+    # w_kw = [w for w in words12 if w.count('k') == 1 and w.count('w') == 1]
+    w_qz = [w for w in w_w0 if w.count('q') == 1 and w.count('z') == 1]
+    w_wz = [w for w in w_w0 if w.count('w') == 1 and w.count('z') == 1]
+    w_xz = [w for w in w_w0 if w.count('x') == 1 and w.count('z') == 1]
+
+    w_others = [w for w in w_w0
+                if w.count('j') == 0 and w.count('k') == 0 and w.count('q') == 0 and
+                w.count('x') == 0 and w.count('z') == 0]
 
     cache_lookup_count = 0
     while True:
-        wordlist8 = get_wordlist8(w_j, w_k, w_q, w_x, w_z, w_w,
-                                  w_k1, w_z1, w_w1,
-                                  w_k2, w_z2, w_w2,
-                                  w_jz, w_kq, w_kw, w_qz, w_wz, w_xz,
+        wordlist8 = get_wordlist8(w_j, w_k, w_q, w_x, w_z,
+                                  w_k1, w_z1,
+                                  w_k2, w_z2,
+                                  w_jz, w_kq, w_qz, w_wz, w_xz,
                                   w_others)
+        # show_progress('.')
         cntr8 = get_counter_from_wordlist(wordlist8)
         gap4 = constraint_satisfaction_gap_from_counter(BANANAGRAM_TILES, cntr8)
         if any(gap_values < 0 for gap_values in gap4.values()):
             continue
+        # show_progress('*')
         if cache4.has_hash_of_counter(gap4):
             hash = cache4.counter2hash(gap4)
             print_wordlist('\nPossible solution found (hash={0:d}:'.format(hash), wordlist8)

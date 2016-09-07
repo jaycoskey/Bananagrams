@@ -50,7 +50,9 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
     Search for 8-word lists that have a complementary 4-word list in the cache.
   * Specialize the 8-word lists and 4-word lists as follows.
     * Have the 8-word lists use all the available Bananagram tiles with: j, k, q, x, z, and w.
+      * Update (2016-09-07): Remove w from this list.
     * Have the 4-word lists not use any of these letters.
+      * Update (2016-09-07): Have this list contain the three w's.
   * The script (bgrams_12x12.py) has three modes of operation:
     * CACHE.  Populate a cache with 4-word lists.
       * Each 4-word list has an integer hash value that can fit in 64-bits.
@@ -63,13 +65,13 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
       * Due to hash collisions, the resulting 4-word list(s) found might not actually complement the 8-word list.
         * This is why the "solution" is called a "possible solution".
 * **Possible future ideas:**
+  * Generalize the cache and search functions to be data-driven, rather than using special cases hard-wired into the code.
   * Modify the search to use async calls, or some other form of parallelism.
-  * For the hash function, I mapped the letters of the alphabet to consecutive prime numbers, multiplied them together, then took the result modulo 10^15.
+  * For the hash function, I mapped the letters of the alphabet to consecutive prime numbers, multiplied them together, then took the result modulo 2^63.
     This results in a hash of the set of letters that
       (a) is independent of the order of letters, and
       (b) could fit in a 64-bit int.
-    Unfortunately, the modulo operation leaves open but open the possibility of a hash collision.
-    The rate of hash collisions might be reduced or even eliminated if we applied two optimizations.
+    Tradeoff: The modulo operation improves performance (TODO: confirm) at a cost: it leaves open the possibility of a hash collision.
 
 # Bananagram Challenge History
  
