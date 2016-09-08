@@ -38,8 +38,7 @@ COMMON_TILES = collections.Counter({
     'u': 6,  'v': 3, 'w': 3,         'y': 3,
 })
 RARE_TILES = collections.Counter({
-    'j': 2, 'k': 2, 'q': 2, 'x': 2, 'z': 2,
-    'w': 3
+    'j': 2, 'k': 2, 'q': 2, 'x': 2, 'z': 2
 })
 WORDLENGTH = 12
 
@@ -258,10 +257,10 @@ def get_valid_wordlist4s(w_w1, w_others, num_wordlists):
 #     j's, k's, q's, x's, z's (2 each), and w's (3)
 # The caller checks to see if the wordlist return is actually usable.
 def get_wordlist8(w_j, w_k, w_q, w_x, w_z,
-                        w_k1, w_z1,
-                        w_k2, w_z2,
-                        w_jz, w_kq, w_qz, w_wz, w_xz,
-                        w_others):
+                  w_k1, w_z1,
+                  w_k2, w_z2,
+                  w_jz, w_kq, w_qz, w_wz, w_xz,
+                  w_others):
     is_found = False
     while not is_found:
         cur_wordlist = get_initial_wordlist8(w_j, w_k, w_q, w_x, w_z)
@@ -422,6 +421,12 @@ def get_wordlist8(w_j, w_k, w_q, w_x, w_z,
     return cur_wordlist
 
 
+def log_wordlist(path_log, words):
+    msg_log = '{0:s};;{1:s};'.format(get_datestamp(), words.__str__())
+    with open(path_log, 'a') as f:
+        f.write(msg_log + '\n')
+
+
 def log_wordlist_plus(path_log, hash, words, cache_lookup_count):
     msg_log = '{0:s};{1:d};{2:s};{3:d}'.format(get_datestamp(), hash, words.__str__(), cache_lookup_count)
     with open(path_log, 'a') as f:
@@ -437,9 +442,9 @@ def main(pool, parser_args):
     words12 = read_words12(PATH_WORDS12)
     cache4 = WordlistCache(args_cache_dir)
     if args_lookup > 0:
-        wordlist4s = cache4.lookup_hash_lines(args_lookup)
-        for wordlist4 in wordlist4s:
-            print('{0:s}'.format(wordlist4.__str__()))
+        lines = cache4.lookup_hash_lines(args_lookup)
+        for line in lines:
+            print('{0:s}'.format(line))
     elif args_cache > 0:
         populate_cache(pool, words12, cache4, args_cache)
     elif args_search:
@@ -534,10 +539,16 @@ def search(cache4, words12):
             continue
         # show_progress('*')
         if cache4.has_hash_of_counter(gap4):
-            hash = cache4.counter2hash(gap4)
-            print_wordlist('\nPossible solution found (hash={0:d}:'.format(hash), wordlist8)
-
-            log_wordlist_plus(PATH_LOG_SOLUTIONS, hash, wordlist8, cache_lookup_count)
+            hash4 = cache4.counter2hash(gap4)
+            print_wordlist('\nPossible solution found (hash4={0:d}:'.format(hash4), wordlist8)
+            log_wordlist_plus(PATH_LOG_SOLUTIONS, hash4, wordlist8, cache_lookup_count)
+            wordlist4s = cache4.lookup_hash_wordlists(hash4)
+            for wordlist4 in wordlist4s:
+                wordlist12 = wordlist8 + wordlist4
+                gap12 = constraint_satisfaction_gap_from_wordlist(BANANAGRAM_TILES, wordlist12)
+                if all(gap_values == 0 for gap_values in gap12.values()):
+                    print_wordlist('\nCONFIRMED solution found: ', wordlist8)
+                    log_wordlist(PATH_LOG_SOLUTIONS, wordlist8)
             cache_lookup_count = 0
         cache_lookup_count += 1
         if cache_lookup_count % 100000 == 0:
