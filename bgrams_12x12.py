@@ -141,7 +141,8 @@ class WordlistCache:
         # billion = 1000000000  # 10^9
         # trillion = 1000000000000  # 10^12
         # quadrillion = 1000000000000000  # 10^15
-        return int(math.pow(2, 63))
+        largestLongPrime = 9223372036854775783  # 2^63 - 25
+        return largestLongPrime
 
     def _hash2path(self, hash):
         return self._cache_dir + '/' + CACHE_FILE_BASENAME + str(hash % 10000).zfill(4)
