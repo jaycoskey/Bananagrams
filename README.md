@@ -102,6 +102,7 @@ Eight-word potentially viable combinations from the above groups are called "bat
 | india     |AB-CC-EF-XX | 72,678,672           |
 | juliet    |AB-CD-EE-XX | 98,625,334           |
 | kilo      |BB-CC-EE-XX | 75,208,057           |
+|**TOTAL**  |All of above| **426,382,429**      |
 
 **Note:** I've attempted to avoid duplicates, but haven't checked
       to see if there are any duplicates in the above decalist count stats.
