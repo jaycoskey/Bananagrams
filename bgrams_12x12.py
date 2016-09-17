@@ -16,6 +16,7 @@ import time
 
 CACHE_DIR = 'bgrams_12x12_cache'
 CACHE_FILE_BASENAME = 'cache_'
+CONST_LARGEST_LONG_PRIME = 9223372036854775783  # 2^63 - 25
 PATH_DICT = '/usr/share/dict/linux.words'
 PATH_LOG_PROGRESS = './bgrams_12x12_progress.log'
 PATH_LOG_SOLUTIONS = './bgrams_12x12_solutions.log'
@@ -141,8 +142,7 @@ class WordlistCache:
         # billion = 1000000000  # 10^9
         # trillion = 1000000000000  # 10^12
         # quadrillion = 1000000000000000  # 10^15
-        largestLongPrime = 9223372036854775783  # 2^63 - 25
-        return largestLongPrime
+        return CONST_LARGEST_LONG_PRIME
 
     def _hash2path(self, hash):
         return self._cache_dir + '/' + CACHE_FILE_BASENAME + str(hash % 10000).zfill(4)
