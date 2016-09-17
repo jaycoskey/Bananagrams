@@ -73,37 +73,37 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
       and two words without any rare tiles.
     * Now, we're going to shift gears, and think only in terms of letter counts for a while.
 
-      | Group |Letter counts          | # of Rare+Common | # of  | Example    |
-      | :---  |  j  |  q  |  x  |  z  | "decalists" (*)  | words | word       |
-      | :---  |---: |---: |---: |---: | ---:             | ---:  | :---       |
-      | A     |  1  |  0  |  0  |  0  | 7                |   28  |conjunctions|
-      | B     |  1  |  0  |  0  |  1  | 1                |    2  |jeopardizing|
-      | C     |  0  |  1  |  0  |  0  | 10               |   56  |liquidations|
-      | D     |  0  |  1  |  0  |  1  | 1                |    6  |tranquilizer|
-      | E     |  0  |  0  |  1  |  0  | 8                |   94  |ambidextrous|
-      | F     |  0  |  0  |  1  |  1  | 1                |    1  |extravaganza|
-      | G     |  0  |  0  |  0  |  2  | 1                |    1  |embezzlement|
-      | H     |  0  |  0  |  0  |  1  | 9                |  138  |hypnotizable|
-      | X     |  0  |  0  |  0  |  0  | 57               | 2840  |heaviweights|
+| Group |Letter counts          | # of Rare+Common | # of  | Example    |
+|       |  j  |  q  |  x  |  z  | "decalists" (*)  | words | word       |
+| :---  |---: |---: |---: |---: | ---:             | ---:  | :---       |
+| A     |  1  |  0  |  0  |  0  | 7                |   28  |conjunctions|
+| B     |  1  |  0  |  0  |  1  | 1                |    2  |jeopardizing|
+| C     |  0  |  1  |  0  |  0  | 10               |   56  |liquidations|
+| D     |  0  |  1  |  0  |  1  | 1                |    6  |tranquilizer|
+| E     |  0  |  0  |  1  |  0  | 8                |   94  |ambidextrous|
+| F     |  0  |  0  |  1  |  1  | 1                |    1  |extravaganza|
+| G     |  0  |  0  |  0  |  2  | 1                |    1  |embezzlement|
+| H     |  0  |  0  |  0  |  1  | 9                |  138  |hypnotizable|
+| X     |  0  |  0  |  0  |  0  | 57               | 2840  |heaviweights|
 
     * **Note:** These numbers are based on the file /usr/share/dict/linux.words in the Cygwin package words-3.0-1.
 
       Eight-word potentially viable combinations from the above groups are called "batches".
 
-      | Batch   | Group       |Decalists(*)|
-      | names   | combinations|(12-tuples) |
-      | :---    | :---        | ---:       |
-      | alpha   | AA-CC-EE-GX | 22,820,590 |
-      | bravo   | AA-CC-EE-HH | 31,709,105 |
-      | charlie | AA-CC-EF-GX |  6,036,199 |
-      | delta   | AA-CC-FF-XX | 11,056,266 |
-      | echo    | AA-CD-EE-GX | 50,474,099 |
-      | foxtrot | AA-CD-EF-XX | 37,687,893 |
-      | golf    | AA-DD-EE-XX | 37,687,893 |
-      | hotel   | AB-CC-EE-GX | 12,022,392 |
-      | india   | AB-CC-EF-XX | 72,678,672 |
-      | juliet  | AB-CD-EE-XX | 98,625,334 |
-      | kilo    | BB-CC-EE-XX | 75,208,057 |
+| Batch   | Group       |Decalists(*)|
+| names   | combinations|(12-tuples) |
+| :---    | :---        | ---:       |
+| alpha   | AA-CC-EE-GX | 22,820,590 |
+| bravo   | AA-CC-EE-HH | 31,709,105 |
+| charlie | AA-CC-EF-GX |  6,036,199 |
+| delta   | AA-CC-FF-XX | 11,056,266 |
+| echo    | AA-CD-EE-GX | 50,474,099 |
+| foxtrot | AA-CD-EF-XX | 37,687,893 |
+| golf    | AA-DD-EE-XX | 37,687,893 |
+| hotel   | AB-CC-EE-GX | 12,022,392 |
+| india   | AB-CC-EF-XX | 72,678,672 |
+| juliet  | AB-CD-EE-XX | 98,625,334 |
+| kilo    | BB-CC-EE-XX | 75,208,057 |
 
     * **Note:** I've attempted to avoid duplicates, but haven't checked
       to see if there are any duplicates in the above decalist count stats.
@@ -132,22 +132,23 @@ Search for a way to group the 144 Bananagram tiles into words of a given length.
     * **End result:** Solutions (if any) to the 12x12 Bananagram Challenge.
 
 * **Phase 1 Stats:**
-    | Batch   | Elapsed Time | System Time |
-    |         | (1 thread)   | (1 thread)  |
-    | :---    |  ---:        | ---:        |
-    | alpha   | 1h:25m:07s   | 1:19:07     |
-    | bravo   |  1:38:45     | 1:30:49     |
-    | charlie |  0:21:06     | 0:19:36     |
-    | delta   |  0:40:30     | 0:37:42     |
-    | echo    |  0:27:20     | 0:25:17     |
-    | foxtrot |  2:53:36     | 2:40:49     |
-    | golf    |  2:07:17     | 1:57:35     |
-    | hotel   |  0:41:19     | 0:38:16     |
-    | india   | 4:22:56      | 4:04:12     |
-    | juliet  |  5:29:27     | 5:03:36     |
-    | kilo    |  4:15:56     | 3:53:04     |
-    | ---     |  ---:        | ---:        |
-    |**TOTAL**| 24:23:19     | 22:30:03    |
+
+| Batch   | Elapsed Time | System Time |
+|         | (1 thread)   | (1 thread)  |
+| :---    |  ---:        | ---:        |
+| alpha   | 1h:25m:07s   | 1:19:07     |
+| bravo   |  1:38:45     | 1:30:49     |
+| charlie |  0:21:06     | 0:19:36     |
+| delta   |  0:40:30     | 0:37:42     |
+| echo    |  0:27:20     | 0:25:17     |
+| foxtrot |  2:53:36     | 2:40:49     |
+| golf    |  2:07:17     | 1:57:35     |
+| hotel   |  0:41:19     | 0:38:16     |
+| india   | 4:22:56      | 4:04:12     |
+| juliet  |  5:29:27     | 5:03:36     |
+| kilo    |  4:15:56     | 3:53:04     |
+| ---     |  ---:        | ---:        |
+|**TOTAL**| 24:23:19     | 22:30:03    |
 
 # Bananagram Challenge History
 
